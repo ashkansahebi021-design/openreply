@@ -2,7 +2,7 @@
 
 ## Passed
 
-- 56 Python tests covering DM/comment/story routing, approval/edit/reject/custom reply, owner authentication, signed webhooks, concurrent deduplication, context/version guards, response windows, API rejection and ambiguous delivery, rate-limit retries, dry-run, budget limits, retention, secure Telegram commissioning, idempotent n8n provisioning, and redacted diagnostics.
+- 60 Python tests covering DM/comment/story routing, approval/edit/reject/custom reply, owner authentication, signed webhooks, concurrent deduplication, context/version guards, response windows, API rejection and ambiguous delivery, rate-limit retries, dry-run, budget limits, retention, secure Telegram commissioning, idempotent n8n provisioning, redacted diagnostics, budgeted OpenAI commissioning and cooldown retries.
 - Real n8n 2.41.6 CLI imported and executed all five workflow graphs against isolated mock providers. Production schedule/error triggers were preserved.
 - Both gateway and n8n Docker images built and deployed successfully in the owner's authorized Railway free trial. Separate persistent volumes are attached. No paid plan was purchased.
 - Live gateway HTTPS health returned 200; unsigned Telegram ingress returned 401. Authenticated diagnostics returned 200 without messages or secrets.
@@ -12,9 +12,9 @@
 
 ## Not yet verified
 
-- Owner-originated Telegram `/status`, live approval cards and callback/edit interactions. Application behavior is covered by mocks; owner intake still needs a real message.
+- Live approval cards and callback/edit interactions. Owner-originated Telegram `/status` was confirmed by the owner; application approval behavior is covered by mocks.
 - Live Meta authorization, webhook, token/scopes/account, permission review, DM/comment/story response and token renewal. Developer login remains blocked by the location screen. Instagram outbound remains disabled, dry-run enabled and Meta verification false.
-- Live OpenAI response quality and connectivity: API key is not configured.
+- OpenAI key is configured through a secure Railway alias reference. The deployed fixed-input check reached the API but both controlled attempts returned `rate_limit`; no successful model output yet. Account credit/rate-limit status requires owner inspection. No API key values were read.
 - Full Docker Compose stack, Caddy certificates, persistent-host restore and backup recovery. Railway Docker builds and live schedules were verified separately.
 - Existing OpenReply root CI fails; the independent PCL CI passes. The original incomplete Prisma foundation is preserved and no root database migration was performed.
 
