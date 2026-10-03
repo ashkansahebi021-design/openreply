@@ -64,6 +64,20 @@ class Application:
 
     def internal(self,path,method,data):
         e=self.engine
+        if method=='GET' and path=='/internal/status':
+            counts={}
+            for table in ('events','telegram_updates'):
+                counts[table]={r['status']:r['count'] for r in e.store.rows(f'SELECT status,COUNT(*) AS count FROM {table} GROUP BY status')}
+            counts['outbox']=e.store.rows('SELECT channel,status,COUNT(*) AS count FROM outbox GROUP BY channel,status')
+            return {'queues':counts,'scheduler':{r['key'].removeprefix('scheduler:'):float(r['value']) for r in
+                e.store.rows("SELECT key,value FROM controls WHERE key LIKE 'scheduler:%'")},
+                'integrations_configured':{'telegram':bool(e.s.telegram_token),'openai':bool(e.s.openai_key),'meta':bool(e.s.meta_token)},
+                'dry_run':e.s.dry_run,'instagram_outbound_enabled':e.s.outbound_enabled,'meta_verified':e.s.meta_verified}
+        if method=='POST' and path in ('/internal/jobs/claim','/internal/telegram/process','/internal/outbox/dispatch','/internal/maintenance'):
+            # Bounded heartbeat state, not one growing audit row per five-second poll.
+            with e.store.transaction() as db:
+                db.execute('INSERT INTO controls(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',
+                    ('scheduler:'+path.removeprefix('/internal/'),str(e.clock())))
         if method=='POST' and path=='/internal/telegram/commission':
             # Runtime uses its own secret; the engineering client never reads the bot token.
             url=e.s.public_base_url.rstrip('/');parts=urlsplit(url)

@@ -12,4 +12,6 @@ Railway trial: one-time $5 credit for up to 30 days, then Free with $1 monthly c
 
 The first n8n image pull returned HTTP 429 from docker.n8n.io. The Dockerfile uses the official n8n GitHub container registry instead. The 2.41.6 manifest digest was verified to match Docker Hub exactly and is pinned in the Dockerfile.
 
+Both containers then deployed successfully. n8n's startup logs confirmed five published workflows. Telegram bot identity and signed webhook registration succeeded. The HTTPS gateway rejects unsigned Telegram requests with 401. Authenticated `/internal/status` reports queue counts, integration presence flags and bounded scheduler heartbeat timestamps without user messages or credentials. Use it to verify actual scheduler processing and outbox delivery; online containers alone do not prove API delivery.
+
 References: https://docs.railway.com/pricing/free-trial ; https://docs.railway.com/volumes/reference ; https://docs.n8n.io/deploy/host-n8n/configure-n8n/use-the-command-line ; https://github.com/n8n-io/n8n/pkgs/container/n8n

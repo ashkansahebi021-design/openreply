@@ -144,6 +144,17 @@ class System(unittest.TestCase):
   s,_=self.http('/internal/jobs/claim');self.assertTrue(s.startswith('401'))
  def test_commission_requires_auth(self):
   s,_=self.http('/internal/telegram/commission');self.assertTrue(s.startswith('401'));self.assertEqual(self.c.tg,[])
+ def test_runtime_status_is_authenticated_and_redacted(self):
+  s,_=self.http('/internal/status','GET');self.assertTrue(s.startswith('401'))
+  s,b=self.http('/internal/status','GET',headers={'HTTP_AUTHORIZATION':'Bearer internal'})
+  self.assertTrue(s.startswith('200'));d=json.loads(b)
+  self.assertTrue(d['integrations_configured']['telegram']);self.assertNotIn('mock',b.decode())
+  self.assertNotIn('999',b.decode());self.assertEqual(d['queues']['outbox'],[])
+ def test_scheduler_heartbeat_is_bounded(self):
+  for _ in range(3):
+   s,_=self.http('/internal/jobs/claim',headers={'HTTP_AUTHORIZATION':'Bearer internal'});self.assertTrue(s.startswith('200'))
+  rows=self.e.store.rows("SELECT * FROM controls WHERE key LIKE 'scheduler:%'")
+  self.assertEqual(len(rows),1);self.assertEqual(float(rows[0]['value']),NOW)
  def test_commission_validates_bot_and_preserves_updates(self):
   self.s.public_base_url='https://pcl.example.com'
   with patch.object(self.c,'telegram',side_effect=[{'id':123,'is_bot':True,'username':'pcl_bot'},True]) as tg:
