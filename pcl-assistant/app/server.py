@@ -3,7 +3,7 @@ import hmac
 import json
 import threading
 from pathlib import Path
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs,urlsplit
 from .settings import Settings
 from .engine import Engine,validate_rule
 from .events import verify_signature
@@ -64,6 +64,24 @@ class Application:
 
     def internal(self,path,method,data):
         e=self.engine
+        if method=='POST' and path=='/internal/telegram/commission':
+            # Runtime uses its own secret; the engineering client never reads the bot token.
+            url=e.s.public_base_url.rstrip('/');parts=urlsplit(url)
+            expected=data.get('expected_username','')
+            if (parts.scheme!='https' or not parts.hostname or parts.username or parts.password
+                or parts.port not in (None,443) or parts.path or parts.query or parts.fragment
+                or not e.s.telegram_secret or not e.s.owner_id or not expected):
+                raise ValueError('invalid_commission_configuration')
+            bot=e.clients.telegram('getMe',{})
+            if bot.get('username')!=expected or not bot.get('is_bot'):
+                raise ValueError('unexpected_bot')
+            e.clients.telegram('setWebhook',{'url':url+'/webhooks/telegram',
+                'secret_token':e.s.telegram_secret,'allowed_updates':['message','callback_query'],
+                'drop_pending_updates':False})
+            with e.store.transaction() as db:
+                e.queue(db,'telegram-commission:'+str(bot['id']),'telegram',{'method':'sendMessage','body':{
+                    'chat_id':e.s.owner_id,'text':'اشکان، اتصال آزمایشی تلگرام PCL آماده است. برای بررسی وضعیت /status را بفرست. اتصال اینستاگرام هنوز فعال نشده است.'}})
+            return {'ok':True,'bot_username':bot['username']}
         if method=='POST' and path=='/internal/jobs/claim':return e.claim()
         if method=='POST' and path=='/internal/events/process':return e.process(data['event_id'],data['lease'])
         if method=='POST' and path=='/internal/telegram/process':

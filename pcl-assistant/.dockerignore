@@ -5,4 +5,4 @@ data
 __pycache__
 .git
 tests
-workflows
+workflows/legacy

@@ -14,6 +14,7 @@ class Settings:
     strong_model: str = ''
     telegram_token: str = ''
     telegram_secret: str = ''
+    public_base_url: str = ''
     owner_id: str = ''
     internal_token: str = ''
     dry_run: bool = True
@@ -32,6 +33,7 @@ class Settings:
                'meta_secret':'META_APP_SECRET','verify_token':'WEBHOOK_VERIFY_TOKEN','graph_version':'META_GRAPH_API_VERSION',
                'openai_key':'OPENAI_API_KEY','model':'OPENAI_MODEL','strong_model':'OPENAI_STRONG_MODEL',
                'telegram_token':'TELEGRAM_BOT_TOKEN','telegram_secret':'TELEGRAM_WEBHOOK_SECRET',
+               'public_base_url':'PUBLIC_BASE_URL',
                'owner_id':'TELEGRAM_OWNER_USER_ID','internal_token':'INTERNAL_API_TOKEN',
                'dry_run':'DRY_RUN','outbound_enabled':'OUTBOUND_ENABLED','meta_verified':'META_CAPABILITIES_VERIFIED',
                'confidence':'AUTO_REPLY_CONFIDENCE','ai_daily_limit':'AI_DAILY_CALL_LIMIT',

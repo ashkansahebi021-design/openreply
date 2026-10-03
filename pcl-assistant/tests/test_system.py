@@ -142,6 +142,27 @@ class System(unittest.TestCase):
   s,_=self.http('/webhooks/telegram');self.assertTrue(s.startswith('401'))
  def test_internal_auth(self):
   s,_=self.http('/internal/jobs/claim');self.assertTrue(s.startswith('401'))
+ def test_commission_requires_auth(self):
+  s,_=self.http('/internal/telegram/commission');self.assertTrue(s.startswith('401'));self.assertEqual(self.c.tg,[])
+ def test_commission_validates_bot_and_preserves_updates(self):
+  self.s.public_base_url='https://pcl.example.com'
+  with patch.object(self.c,'telegram',side_effect=[{'id':123,'is_bot':True,'username':'pcl_bot'},True]) as tg:
+   s,b=self.http('/internal/telegram/commission',body=b'{"expected_username":"pcl_bot"}',headers={'HTTP_AUTHORIZATION':'Bearer internal'})
+   self.assertTrue(s.startswith('200'));self.assertEqual(json.loads(b)['bot_username'],'pcl_bot')
+   self.assertFalse(tg.call_args.args[1]['drop_pending_updates'])
+   self.assertEqual(tg.call_args.args[1]['secret_token'],'tg-secret')
+  self.assertEqual(len(self.e.store.rows("SELECT * FROM outbox WHERE id='telegram-commission:123'")),1)
+ def test_commission_wrong_bot_rejected(self):
+  self.s.public_base_url='https://pcl.example.com'
+  with patch.object(self.c,'telegram',return_value={'id':123,'is_bot':True,'username':'other_bot'}) as tg:
+   s,_=self.http('/internal/telegram/commission',body=b'{"expected_username":"pcl_bot"}',headers={'HTTP_AUTHORIZATION':'Bearer internal'})
+   self.assertTrue(s.startswith('400'));self.assertEqual(tg.call_count,1)
+ def test_commission_invalid_url_rejected(self):
+  for url in ('http://pcl.example.com','https://user:password@pcl.example.com','https://pcl.example.com/path','https://pcl.example.com?token=x'):
+   self.s.public_base_url=url
+   s,_=self.http('/internal/telegram/commission',body=b'{"expected_username":"pcl_bot"}',headers={'HTTP_AUTHORIZATION':'Bearer internal'})
+   self.assertTrue(s.startswith('400'))
+  self.assertEqual(self.c.tg,[])
  def test_secrets_not_logged(self):
   self.process(self.dm());self.c.failure='api_rejected';self.e.dispatch();self.assertNotIn('mock',json.dumps(self.e.store.rows('SELECT * FROM audit')))
  def test_private_reply_recipient(self):
