@@ -10,4 +10,6 @@ Set gateway `PUBLIC_BASE_URL` to its HTTPS origin. With the separate internal be
 
 Railway trial: one-time $5 credit for up to 30 days, then Free with $1 monthly credit. Restricted trial accounts may not reach external APIs. Neither phase guarantees continuous two-service hosting. Trial volumes may be deleted 30 days after credit expiry; export beforehand. No automatic paid upgrade is authorized.
 
-References: https://docs.railway.com/pricing/free-trial ; https://docs.railway.com/volumes/reference ; https://docs.n8n.io/deploy/host-n8n/configure-n8n/use-the-command-line
+The first n8n image pull returned HTTP 429 from docker.n8n.io. The Dockerfile uses the official n8n GitHub container registry instead. The 2.41.6 manifest digest was verified to match Docker Hub exactly and is pinned in the Dockerfile.
+
+References: https://docs.railway.com/pricing/free-trial ; https://docs.railway.com/volumes/reference ; https://docs.n8n.io/deploy/host-n8n/configure-n8n/use-the-command-line ; https://github.com/n8n-io/n8n/pkgs/container/n8n
