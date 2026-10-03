@@ -83,18 +83,20 @@ class Application:
             with self.ai_check_lock:
                 with e.store.transaction() as db:
                     old=db.execute('SELECT value FROM controls WHERE key=?',(key,)).fetchone()
-                    if old:return json.loads(old['value'])
+                    if old:
+                        previous=json.loads(old['value'])
+                        if previous.get('ok') or previous.get('error')=='check_pending_or_interrupted' or previous.get('retry_at',0)>e.clock():return previous
                     db.execute('INSERT OR IGNORE INTO usage(day) VALUES(?)',(day,))
                     if db.execute('SELECT calls FROM usage WHERE day=?',(day,)).fetchone()['calls']>=e.s.ai_daily_limit:
                         return {'ok':False,'error':'ai_budget_exhausted'}
                     db.execute('UPDATE usage SET calls=calls+1 WHERE day=?',(day,))
                     # Reserve before network I/O: a crash must not cause blind repeat spending.
-                    db.execute('INSERT INTO controls(key,value) VALUES(?,?)',(key,json.dumps({'ok':False,'error':'check_pending_or_interrupted'})))
+                    db.execute('INSERT INTO controls(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',(key,json.dumps({'ok':False,'error':'check_pending_or_interrupted'})))
                 try:
                     decision=e.clients.ai({'text':'Persian Creative Lab چه کاری انجام می‌دهد؟','kind':'dm'},[],e.knowledge)
                     result={'ok':True,'model':e.s.model,'category':decision['category'],'reply':decision['reply']}
                 except APIError as error:
-                    result={'ok':False,'error':error.kind,'model':e.s.model}
+                    result={'ok':False,'error':error.kind,'model':e.s.model,'retry_at':e.clock()+max(60,error.retry_after)}
                 with e.store.transaction() as db:
                     db.execute('UPDATE controls SET value=? WHERE key=?',(json.dumps(result,ensure_ascii=False),key))
                     # Keep only the most recent commissioning check, including across model changes.

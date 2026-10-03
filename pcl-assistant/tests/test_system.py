@@ -168,6 +168,15 @@ class System(unittest.TestCase):
   with patch('urllib.request.urlopen',side_effect=error):
    with self.assertRaises(APIError) as caught:Clients(self.s).ai({'text':'test','kind':'dm'},[],{})
   self.assertEqual(caught.exception.kind,'openai_insufficient_quota')
+ def test_openai_check_failure_cooldown_then_retry(self):
+  auth={'HTTP_AUTHORIZATION':'Bearer internal'}
+  with patch.object(self.c,'ai',side_effect=APIError('rate_limit',30)) as ai:
+   for _ in range(2):
+    _,b=self.http('/internal/openai/check',headers=auth);self.assertEqual(json.loads(b)['error'],'rate_limit')
+   self.assertEqual(ai.call_count,1)
+  self.now+=61
+  _,b=self.http('/internal/openai/check',headers=auth);self.assertTrue(json.loads(b)['ok'])
+  self.assertEqual(self.e.store.one('SELECT calls FROM usage')['calls'],2)
  def test_runtime_status_is_authenticated_and_redacted(self):
   s,_=self.http('/internal/status','GET');self.assertTrue(s.startswith('401'))
   s,b=self.http('/internal/status','GET',headers={'HTTP_AUTHORIZATION':'Bearer internal'})
