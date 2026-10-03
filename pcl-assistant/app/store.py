@@ -38,6 +38,20 @@ CREATE TABLE IF NOT EXISTS audit (
  id INTEGER PRIMARY KEY, timestamp REAL NOT NULL, event_id TEXT, action TEXT NOT NULL, details TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS usage (day TEXT PRIMARY KEY,calls INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS controls (key TEXT PRIMARY KEY,value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS telegram_receipts (id INTEGER PRIMARY KEY);
+CREATE TABLE IF NOT EXISTS public_users (
+ user_id TEXT PRIMARY KEY,username TEXT NOT NULL DEFAULT '',lead_state TEXT NOT NULL DEFAULT 'new',last_interaction REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS public_messages (
+ id INTEGER PRIMARY KEY,user_id TEXT NOT NULL,role TEXT NOT NULL,text TEXT NOT NULL,created REAL NOT NULL);
+CREATE INDEX IF NOT EXISTS public_messages_user ON public_messages(user_id,id);
+CREATE TABLE IF NOT EXISTS public_tickets (
+ id TEXT PRIMARY KEY,user_id TEXT NOT NULL,category TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'pending',
+ version INTEGER NOT NULL DEFAULT 1,created REAL NOT NULL,updated REAL NOT NULL,draft TEXT NOT NULL DEFAULT '',
+ notice_id INTEGER,edit_prompt_id INTEGER);
+CREATE INDEX IF NOT EXISTS public_tickets_user ON public_tickets(user_id,status);
+CREATE TABLE IF NOT EXISTS public_receipts (id INTEGER PRIMARY KEY,user_id TEXT NOT NULL,created REAL NOT NULL);
+CREATE INDEX IF NOT EXISTS public_receipts_user ON public_receipts(user_id,created);
+CREATE TABLE IF NOT EXISTS public_faqs (keyword TEXT PRIMARY KEY,response TEXT NOT NULL,active INTEGER NOT NULL DEFAULT 1);
 '''
 
 class Store:
@@ -50,6 +64,8 @@ class Store:
         self.db.execute('PRAGMA synchronous=FULL')
         self.db.execute('PRAGMA busy_timeout=5000')
         self.db.executescript(SCHEMA)
+        # Compact tombstones survive payload retention and prevent duplicate owner/public sends.
+        self.db.execute('INSERT OR IGNORE INTO telegram_receipts SELECT id FROM telegram_updates')
 
     @contextmanager
     def transaction(self):

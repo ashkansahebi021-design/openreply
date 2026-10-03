@@ -1,6 +1,6 @@
 # PCL Instagram AI Assistant
 
-**وضعیت:** کد و تست‌های محلی آماده‌اند. اتصال واقعی Meta، OpenAI و تلگرام و استقرار دائمی هنوز انجام نشده است. هیچ دایرکت واقعی برای تست ارسال نشده. قوانین نمونه خاموش‌اند.
+**وضعیت:** gateway و n8n روی دورهٔ آزمایشی مجاز Railway آنلاین‌اند و ارتباط واقعی تلگرام تأیید شده. کانال عمومی تلگرام برای پاسخ‌های آماده و ارجاع درخواست به مالک پیاده شده؛ ChatGPT عمومی فعال نیست. کلید OpenAI ثبت شده اما آزمایش API پاسخ موفق نداده (`rate_limit`). اتصال Meta هنوز به‌علت محدودیت ورود تکمیل نشده؛ ارسال اینستاگرام خاموش است. هیچ اشتراک پولی خریداری نشده.
 
 این پوشه سیستم مستقل Persian Creative Lab در مخزن موجود است. Codex ساخت و نگهداری را انجام می‌دهد؛ پاسخ روزمره با OpenAI API تولید می‌شود. اجرای OpenReply برای این سیستم لازم نیست.
 
@@ -15,6 +15,10 @@ Codex شناسهٔ ریلز و متن دقیق را ثبت می‌کند و قا
 برای سؤال قیمت، سفارش، تخفیف، همکاری، شکایت یا پاسخ نامطمئن، تلگرام پیشنهاد و سابقهٔ کوتاه را نشان می‌دهد. با **تأیید، ویرایش، رد، پاسخ دلخواه** تصمیم می‌گیرید. ویرایش ابتدا پیش‌نمایش جدید ایجاد می‌کند؛ باید دوباره تأیید شود. پیام جدید مخاطب، پیش‌نویس قدیمی را بی‌اعتبار می‌کند.
 
 فرمان‌ها: `/rules`، `/status`، `/pause`، `/resume`، `/help`. توقف از تلگرام روی ارسال‌های آینده اثر می‌گذارد؛ پیامی که قبلاً به Meta ارسال شده قابل پس‌گرفتن نیست.
+
+## تلگرام عمومی
+
+مخاطب وارد [ربات PCL](https://t.me/persiancreativelab_bot) می‌شود و `/start` می‌فرستد. پاسخ آمادهٔ خدمات و راهنمای درخواست فعال است؛ سؤال اختصاصی، قیمت و پروژه برای مالک می‌آید. این مسیر هیچ تماس OpenAI ندارد. مالک `/public` را برای وضعیت، و دکمهٔ «نوشتن پاسخ» را برای پاسخ مستقیم به مخاطب استفاده می‌کند. جزئیات و افزودن پاسخ آماده: [راهنمای تلگرام عمومی](docs/public-telegram.md).
 
 ## Architecture
 
@@ -42,7 +46,7 @@ SQLite is selected because no working connected database was found. Single accou
 - Self-hosted n8n Community: separate persistent SQLite volume.
 - Official Meta Instagram Login API; Telegram Bot API.
 - OpenAI API is metered separately from a ChatGPT subscription. Default `gpt-4.1-mini`; current verified rates $0.40 input/$1.60 output per million tokens. Example: 1,000 AI calls with 1,000 input + 150 output tokens each ≈ $0.64, excluding longer contexts and retries. This is an illustration, not a billing guarantee. Rules and greetings make zero model calls. Daily AI call cap defaults to 100, context to 12 messages, output to 450 tokens.
-- Hosting: provider-neutral Docker Compose. Reuse an existing always-on server if available; no host has been provisioned. Railway already connected but its OpenReply deployment failed and has no volumes/secrets. Pricing reviewed: Hobby has $5 monthly minimum with usage charged above included credits. Its limited free tier must not be described as guaranteed free always-on hosting for both services. No paid resource was created.
+- Hosting: provider-neutral Docker Compose. Reuse an existing always-on server if available; the existing Railway trial now runs the gateway and private n8n with separate durable volumes. Pricing reviewed: Hobby has $5 monthly minimum with usage charged above included credits. Its limited free tier must not be described as guaranteed free always-on hosting for both services. No paid resource was created.
 
 ## Workflows
 
@@ -119,7 +123,8 @@ Use a dedicated bot. Owner creates/authorizes it with BotFather, then enters its
 | `META_GRAPH_API_VERSION` | Verified configurable Graph version; default v25.0 |
 | `OPENAI_API_KEY`, `OPENAI_MODEL` | Metered runtime AI |
 | `OPENAI_STRONG_MODEL` | Reserved; no stronger-model spending path enabled |
-| `TELEGRAM_BOT_TOKEN` | Dedicated owner bot |
+| `TELEGRAM_BOT_TOKEN` | Bot for public inquiries and private owner control |
+| `PUBLIC_TELEGRAM_ENABLED` | Enable public FAQ/inquiries; default false; does not enable AI or Instagram |
 | `TELEGRAM_WEBHOOK_SECRET`, `TELEGRAM_OWNER_USER_ID` | Webhook and owner authorization |
 | `INTERNAL_API_TOKEN` | n8n → runtime bearer credential |
 | `DRY_RUN`, `OUTBOUND_ENABLED`, `META_CAPABILITIES_VERIFIED` | Three live-send commissioning gates |
@@ -153,7 +158,7 @@ The engineer replaces the example post and link with verified owner content. No 
 - Atomic event deduplication, processing leases, unique outbox per event, draft versions and context checks.
 - Backoff for explicit rate-limit rejection only. Timeout/5xx/missing message ID/process crash are **unknown_delivery**, require manual reconciliation, and are not automatically resent. Meta send has no general guaranteed idempotency key; exactly-once delivery cannot be promised across an ambiguous provider outcome.
 - Short context/lead states retained locally; raw message content redacted after retention while dedup tombstones remain.
-- Live delivery, Meta review, token refresh, external backup and hosting remain commissioning work. Multimedia messages go to owner review. Username shown when available from comment events; for DMs ID is shown if username is absent.
+- Live Instagram delivery, Meta review, token refresh, external backup and hosting after trial remain commissioning work. Multimedia messages go to owner review. Username shown when available from comment events; for DMs ID is shown if username is absent.
 - Grounding checks and structured outputs reduce hallucinations but do not prove every sentence correct. Populate confirmed knowledge, review real examples, and raise threshold or require all approvals when needed.
 
 ## Troubleshooting

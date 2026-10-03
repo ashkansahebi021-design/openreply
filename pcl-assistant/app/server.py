@@ -74,6 +74,7 @@ class Application:
             return {'queues':counts,'scheduler':{r['key'].removeprefix('scheduler:'):float(r['value']) for r in
                 e.store.rows("SELECT key,value FROM controls WHERE key LIKE 'scheduler:%'")},
                 'integrations_configured':{'telegram':bool(e.s.telegram_token),'openai':bool(e.s.openai_key),'meta':bool(e.s.meta_token)},
+                'public_telegram_enabled':e.s.public_telegram_enabled,'ai_daily_call_limit':e.s.ai_daily_limit,
                 'dry_run':e.s.dry_run,'instagram_outbound_enabled':e.s.outbound_enabled,'meta_verified':e.s.meta_verified}
         if method=='POST' and path=='/internal/openai/check':
             # Fixed synthetic input, no conversation/outbox side effects or secret exposure.

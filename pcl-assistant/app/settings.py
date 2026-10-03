@@ -16,6 +16,7 @@ class Settings:
     telegram_secret: str = ''
     public_base_url: str = ''
     owner_id: str = ''
+    public_telegram_enabled: bool = False
     internal_token: str = ''
     dry_run: bool = True
     outbound_enabled: bool = False
@@ -35,6 +36,7 @@ class Settings:
                'telegram_token':'TELEGRAM_BOT_TOKEN','telegram_secret':'TELEGRAM_WEBHOOK_SECRET',
                'public_base_url':'PUBLIC_BASE_URL',
                'owner_id':'TELEGRAM_OWNER_USER_ID','internal_token':'INTERNAL_API_TOKEN',
+               'public_telegram_enabled':'PUBLIC_TELEGRAM_ENABLED',
                'dry_run':'DRY_RUN','outbound_enabled':'OUTBOUND_ENABLED','meta_verified':'META_CAPABILITIES_VERIFIED',
                'confidence':'AUTO_REPLY_CONFIDENCE','ai_daily_limit':'AI_DAILY_CALL_LIMIT',
                'approval_ttl':'APPROVAL_TTL_SECONDS','context_limit':'CONTEXT_LIMIT',

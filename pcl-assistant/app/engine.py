@@ -6,6 +6,7 @@ from datetime import datetime,timezone
 from .clients import APIError,Clients
 from .events import normalize,normalize_text,keyword_matches,valid_id
 from .store import Store
+from .public_telegram import PublicTelegram
 
 SENSITIVE={
  'pricing':['قیمت','هزینه','نرخ','تعرفه','چند تومن','چند تومان','چقدر','price','cost','rate'],
@@ -21,6 +22,7 @@ class Engine:
     def __init__(self,settings,store=None,clients=None,clock=time.time,knowledge=None):
         self.s=settings;self.store=store or Store(settings.db_path);self.clients=clients or Clients(settings)
         self.clock=clock;self.knowledge=knowledge or {}
+        self.public=PublicTelegram(self)
         # A process crash after a provider send is ambiguous, never replay the send automatically.
         with self.store.transaction() as db:
             stale=list(db.execute("SELECT id,event_id FROM outbox WHERE status='sending'"))
@@ -160,7 +162,9 @@ class Engine:
 
     def receive_telegram(self,update):
         if not isinstance(update,dict) or type(update.get('update_id')) is not int:raise ValueError('Invalid update')
-        with self.store.transaction() as db:db.execute('INSERT OR IGNORE INTO telegram_updates(id,payload) VALUES(?,?)',(update['update_id'],json.dumps(update,ensure_ascii=False)))
+        with self.store.transaction() as db:
+            if db.execute('INSERT OR IGNORE INTO telegram_receipts(id) VALUES(?)',(update['update_id'],)).rowcount:
+                db.execute('INSERT OR IGNORE INTO telegram_updates(id,payload) VALUES(?,?)',(update['update_id'],json.dumps(update,ensure_ascii=False)))
         return {'accepted':True}
 
     def telegram_process(self):
@@ -170,10 +174,12 @@ class Engine:
                 u=json.loads(row['payload']);cq=u.get('callback_query') or {};m=cq.get('message') or u.get('message') or {};frm=cq.get('from') or m.get('from') or {}
                 if (not self.s.owner_id or str(frm.get('id'))!=self.s.owner_id or str(m.get('chat',{}).get('id'))!=self.s.owner_id
                     or m.get('chat',{}).get('type')!='private' or frm.get('is_bot')):
-                    db.execute("UPDATE telegram_updates SET status='unauthorized' WHERE id=?",(row['id'],));continue
+                    handled=not cq and self.public.receive(db,m,row['id'],SENSITIVE,RISKY_REPLY)
+                    db.execute('UPDATE telegram_updates SET status=? WHERE id=?',('done' if handled else 'unauthorized',row['id']))
+                    count+=int(bool(handled));continue
                 if cq:
                     self.queue(db,'tg:callback:'+str(row['id']),'telegram',{'method':'answerCallbackQuery','body':{'callback_query_id':cq['id']}})
-                    self.callback(db,cq,m)
+                    if not self.public.callback(db,cq,m):self.callback(db,cq,m)
                 elif isinstance(m.get('text'),str):self.owner_message(db,m,row['id'])
                 db.execute("UPDATE telegram_updates SET status='done' WHERE id=?",(row['id'],));count+=1
         return {'processed':count}
@@ -205,6 +211,7 @@ class Engine:
         db.execute('UPDATE conversations SET pending=?,lead_state=CASE WHEN lead_state=\'awaiting approval\' THEN \'warm lead\' ELSE lead_state END WHERE user_id=?',(int(bool(pending)),user))
 
     def owner_message(self,db,m,update_id):
+        if self.public.owner_message(db,m,update_id):return
         reply_id=m.get('reply_to_message',{}).get('message_id');text=m['text'];now=self.clock()
         if reply_id:
             a=db.execute("SELECT * FROM approvals WHERE edit_prompt_id=? AND status='editing'",(reply_id,)).fetchone()
@@ -242,7 +249,9 @@ class Engine:
         if text=='/status':
             rows=list(db.execute('SELECT status,COUNT(*) AS n FROM outbox GROUP BY status'))
             return f"حالت آزمایشی: {self.s.dry_run}\nارسال فعال: {self.s.outbound_enabled}\n"+'\n'.join(f"{r['status']}: {r['n']}" for r in rows)
-        return ('/pause توقف ارسال\n/resume ادامه\n/rules قوانین\n/on ID و /off ID\n/status وضعیت\n'
+        return ('/public وضعیت و پیش‌نمایش بات عمومی\n/tgfaqs پاسخ‌های آماده تلگرام\n'
+                '/tgfaq سپس keyword: و reply: در خط‌های جدا\n/tgreply ID متن پاسخ مخاطب\n'
+                '/pause توقف ارسال اینستاگرام\n/resume ادامه\n/rules قوانین\n/on ID و /off ID\n/status وضعیت\n'
                 '/lead USER_ID customer\nقانون جدید:\n/rule\nid: lawyer-reel\ntrigger: comment\npost: شناسه عددی ریلز\nkeyword: وکیل\nreply: متن پاسخ\napproval: no\n'
                 'برای استوری trigger: story و post: شناسه استوری. برای دایرکت trigger: dm و post: *')
 
@@ -282,6 +291,8 @@ class Engine:
                         db.execute('UPDATE outbox SET next_at=? WHERE id=?',(now+60,r['id']));continue
                 elif not self.s.telegram_token:
                     db.execute('UPDATE outbox SET next_at=? WHERE id=?',(now+60,r['id']));continue
+                if r['channel']=='telegram' and p.get('ticket_id') and not self.public.valid_outbox(db,p):
+                    db.execute("UPDATE outbox SET status='blocked',error='stale_public_ticket' WHERE id=?",(r['id'],));continue
                 if r['channel']=='telegram' and p.get('save_as')=='approval':
                     a=db.execute('SELECT * FROM approvals WHERE id=?',(r['approval_id'],)).fetchone()
                     v=int(r['id'].rsplit(':',1)[-1])
@@ -309,16 +320,22 @@ class Engine:
                     db.execute('UPDATE conversations SET last_response=? WHERE user_id=?',(p['text'],e['user_id']))
                     db.execute('UPDATE events SET status=? WHERE id=?',(status,e['id']))
                     if r['approval_id']:db.execute('UPDATE approvals SET status=? WHERE id=?',(status,r['approval_id']));self.refresh_pending(db,e['user_id'])
-                if not e and status=='sent' and p.get('save_as') and isinstance(result,dict):
+                if not e and status=='sent' and p.get('ticket_id'):
+                    self.public.delivered(db,p,result)
+                elif not e and status=='sent' and p.get('save_as') and isinstance(result,dict):
                     column='telegram_message_id' if p['save_as']=='approval' else 'edit_prompt_id'
                     db.execute(f'UPDATE approvals SET {column}=? WHERE id=?',(result['message_id'],r['approval_id']))
                 if e and status in ('failed','unknown_delivery'):self.alert(db,error or status,r['id'])
+                if p.get('public_answer') and status in ('failed','unknown_delivery'):
+                    db.execute('UPDATE public_tickets SET status=? WHERE id=? AND version=?',(status,p['ticket_id'],p['ticket_version']))
+                    self.alert(db,error or status,r['id'])
             processed+=1
         return {'processed':processed}
 
     def maintenance(self):
         now=self.clock();cutoff=now-self.s.retention_days*86400
         with self.store.transaction() as db:
+            self.public.maintenance(db,cutoff)
             stuck=list(db.execute("SELECT id FROM outbox WHERE status='sending' AND started_at<?",(now-120,)))
             for r in stuck:
                 db.execute("UPDATE outbox SET status='unknown_delivery',error='send_lease_expired' WHERE id=?",(r['id'],))
