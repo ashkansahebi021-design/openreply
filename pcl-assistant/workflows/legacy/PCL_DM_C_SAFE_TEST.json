@@ -1,0 +1,871 @@
+{
+  "name": "PCL DM - C Send & Verify — SAFE TEST",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "approval_ref"
+            },
+            {
+              "name": "draft_version"
+            }
+          ]
+        }
+      },
+      "id": "900221c2-c46b-4ee6-9f8c-58c473b016a6",
+      "name": "Approval Input",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -64,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "SELECT_TEST_MESSAGES_TABLE"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "approval_ref",
+              "keyValue": "={{ $(\"Approval Input\").first().json.approval_ref }}",
+              "condition": "eq"
+            }
+          ]
+        },
+        "resource": "row",
+        "returnAll": true
+      },
+      "id": "e25a4f8d-64fd-447d-88dd-7c49eb7d71f4",
+      "name": "Get Message",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        224,
+        96
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "SELECT_TEST_SETTINGS_TABLE"
+        },
+        "returnAll": true,
+        "resource": "row"
+      },
+      "id": "3aa5305d-768f-4ae0-b5ca-edcc238de3c3",
+      "name": "Get Settings",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        448,
+        96
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const settings={};const errors=[];\n for(const {json:j} of $('Get Settings').all()){if(j.setting_key==null)continue;if(Object.hasOwn(settings,j.setting_key))errors.push('duplicate_settings');settings[j.setting_key]=j.setting_value;}\n const input=$('Approval Input').first().json;\n const ref=String(input.approval_ref || '');const version=Number(input.draft_version);\n const approvals=$('Get Approval').all().map(x=>x.json).filter(j=>j.id!=null&&j.approval_ref===ref);\n const messages=$('Get Message').all().map(x=>x.json).filter(j=>j.id!=null&&j.approval_ref===ref);\n const a=approvals.length===1?approvals[0]:{};const m=messages.length===1?messages[0]:{};\n if(approvals.length!==1||messages.length!==1)errors.push('missing_or_duplicate_record');\n if(!/^PCL[A-Za-z0-9_-]{1,29}$/.test(ref)||!Number.isInteger(version)||version<1)errors.push('invalid_request');\n if(a.status!=='approved'||String(a.awaiting_edit).toLowerCase()==='true')errors.push('not_approved');\n if(Number(a.draft_version)!==version||Number(m.draft_version)!==version)errors.push('version_mismatch');\n for(const key of ['account_id','provider_message_id','sender_id','conversation_id'])if(!a[key]||String(a[key])!==String(m[key]))errors.push('record_mismatch_'+key);\n if(!settings.IG_ACCOUNT_ID||String(a.account_id)!==String(settings.IG_ACCOUNT_ID))errors.push('account_mismatch');\n if(typeof a.draft_reply_fa!=='string'||!a.draft_reply_fa.trim()||a.draft_reply_fa.length>1000||a.draft_reply_fa!==m.draft_reply_fa)errors.push('text_mismatch');\n if(['sent','sending','simulated','unknown_delivery','rejected','window_expired'].includes(m.status))errors.push('message_terminal_or_inflight');\n const now=Date.now();const expiry=Date.parse(a.expires_at || '');const decided=Date.parse(a.decided_at || '');\n if(!Number.isFinite(expiry)||expiry<=now)errors.push('approval_expired_or_missing');\n if(!settings.TELEGRAM_OWNER_USER_ID||String(a.decided_by)!==String(settings.TELEGRAM_OWNER_USER_ID)||!Number.isFinite(decided)||decided>now+60000)errors.push('owner_decision_missing');\n const received=Date.parse(m.received_at || '');\n const wh=Number(settings.MESSAGING_WINDOW_HOURS);const windowHours=Number.isFinite(wh)&&wh>0?Math.min(wh,24):24;\n const age=now-received;const within_window=Number.isFinite(received)&&age>=0&&age<windowHours*3600000-60000;\n if(!Number.isFinite(received)||received>now)errors.push('invalid_received_time');\n const conversation=$('Get Conversation Messages').all().map(x=>x.json).filter(j=>j.id!=null);\n if(!conversation.some(j=>j.provider_message_id===m.provider_message_id&&String(j.account_id)===String(m.account_id)))errors.push('conversation_missing');\n for(const j of conversation){\n  if(String(j.account_id)!==String(m.account_id)||j.conversation_id!==m.conversation_id){errors.push('conversation_mismatch');continue;}\n  const t=Date.parse(j.received_at || '');\n  if(!Number.isFinite(t)||(j.provider_message_id!==m.provider_message_id&&t>=received))errors.push('newer_or_unordered_message');\n }\n const test_mode=String(settings.TEST_MODE).toLowerCase()!=='false';\n const kill_switch=String(settings.OUTBOUND_KILL_SWITCH).toLowerCase()!=='false';\n return [{json:{approval_ref:ref,draft_version:version,approval_row_id:a.id,message_row_id:m.id,message_id:a.provider_message_id || '',draft_reply_fa:a.draft_reply_fa || '',recipient_igsid:a.sender_id || '',ig_account_id:a.account_id || '',test_mode,kill_switch,within_window,received_at:m.received_at || '',valid_context:errors.length===0,block_reasons:[...new Set(errors)]}}];"
+      },
+      "id": "c0f23fb2-24c2-4ce2-8092-ce2bf5d49b89",
+      "name": "Build Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "SELECT_TEST_APPROVALS_TABLE"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Build Context\").first().json.approval_row_id }}"
+            },
+            {
+              "keyName": "approval_ref",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Build Context\").first().json.approval_ref }}"
+            },
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "approved"
+            },
+            {
+              "keyName": "draft_version",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Build Context\").first().json.draft_version }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "sending"
+          }
+        },
+        "options": {},
+        "resource": "row"
+      },
+      "id": "4d88da5d-322e-40b2-a697-84896d1a08cb",
+      "name": "Acquire Lock",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        896,
+        96
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "lock_checked",
+              "leftValue": "={{ $input.all().filter(x => x.json.id != null).length === 1 && $json.status === \"sending\" && String($json.id) === String($(\"Build Context\").first().json.approval_row_id) && Number($json.draft_version) === $(\"Build Context\").first().json.draft_version }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e357e03e-472d-4c29-b014-51ac336f51d0",
+      "name": "Lock Acquired?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1120,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { approval_ref: $(\"Build Context\").first().json.approval_ref, final_status: \"skipped_not_approved\", simulated: false } }];"
+      },
+      "id": "02bd894a-6adc-40f6-94b7-366a9949ebc7",
+      "name": "Result: Not Approved",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "kill",
+              "leftValue": "={{ $(\"Build Context\").first().json.kill_switch }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "f65881de-2aee-460b-b82a-b38d84841f01",
+      "name": "Kill Switch On?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1360,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { approval_ref: $(\"Build Context\").first().json.approval_ref, final_status: \"blocked_kill_switch\", simulated: false } }];"
+      },
+      "id": "91dbc426-5f5d-404a-ac22-c38e2c21e42a",
+      "name": "Result: Blocked",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1792,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "window",
+              "leftValue": "={{ $(\"Build Context\").first().json.within_window }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "25a056de-11f6-4c24-b1d9-78074c41e075",
+      "name": "Within Messaging Window?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1568,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "test",
+              "leftValue": "={{ $(\"Build Context\").first().json.test_mode }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "93f728f2-5b44-4874-81aa-be7f83dd7fe8",
+      "name": "Test Mode?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1792,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "SELECT_TEST_APPROVALS_TABLE"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Build Context\").first().json.approval_row_id }}"
+            },
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "sending"
+            },
+            {
+              "keyName": "draft_version",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Build Context\").first().json.draft_version }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "simulated"
+          }
+        },
+        "options": {},
+        "resource": "row"
+      },
+      "id": "c25168c0-5f68-4436-ad66-5011ee87f501",
+      "name": "Simulate Update (Approval)",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2016,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "SELECT_TEST_MESSAGES_TABLE"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Build Context\").first().json.message_row_id }}"
+            },
+            {
+              "keyName": "draft_version",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Build Context\").first().json.draft_version }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "simulated",
+            "last_error": "TEST_ONLY: no Instagram API call; this is not sent or delivered.",
+            "outbound_message_id": null,
+            "sent_at": null
+          }
+        },
+        "options": {},
+        "resource": "row"
+      },
+      "id": "9d1fd041-c178-46cb-b13c-854877cdc699",
+      "name": "Simulate Update (Message)",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:{approval_ref:$('Build Context').first().json.approval_ref,final_status:'simulated',simulated:true,instagram_api_called:false}}];"
+      },
+      "id": "c3d42cf6-8cac-4a09-951f-66df89822b76",
+      "name": "Result: Simulated",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2464,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "SELECT_TEST_APPROVALS_TABLE"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Build Context\").first().json.approval_row_id }}"
+            },
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "approved"
+            },
+            {
+              "keyName": "draft_version",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Build Context\").first().json.draft_version }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "window_expired"
+          }
+        },
+        "options": {},
+        "resource": "row"
+      },
+      "id": "c990079a-1703-4e5e-a3d3-b15b1adb2466",
+      "name": "Mark Window Expired (Approval)",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1712,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "SELECT_TEST_MESSAGES_TABLE"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "approval_ref",
+              "keyValue": "={{ $(\"Build Context\").first().json.approval_ref }}",
+              "condition": "eq"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "window_expired",
+            "last_error": "Outside 24h messaging window; cannot send."
+          }
+        },
+        "options": {},
+        "resource": "row"
+      },
+      "id": "01c409b1-2982-4342-99ac-8062c5bc64c2",
+      "name": "Mark Window Expired (Message)",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2016,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { approval_ref: $(\"Build Context\").first().json.approval_ref, final_status: \"window_expired\", simulated: false } }];"
+      },
+      "id": "124bb286-bf70-43f1-aca6-b565451d9978",
+      "name": "Result: Window Expired",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2240,
+        576
+      ]
+    },
+    {
+      "id": "5ea16e00-2b7f-47e4-9064-89918d3748f2",
+      "name": "READ FIRST — SAFE TEST ONLY",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        -650
+      ],
+      "parameters": {
+        "content": "## فقط تست — نه راه‌اندازی نهایی\n\nاین نسخه غیرفعال است. اطلاعات اتصال و جدول‌های تست را باید انتخاب کنید. اعتبار AI Builder لازم نیست، اما اجرای n8n و مدل ممکن است سهمیه/هزینه جدا داشته باشد.\n\n**هیچ دایرکتی در این نسخه ارسال نمی‌شود.**\n\nA: ورودی نمونه دستی؛ وب‌هوک واقعی مسدود است.\nB: تأیید فقط در چت خصوصی مالک، با نسخه و شناسه پیام.\nC: شبیه‌سازی بدون اتصال ارسال Instagram.\n\nقبل از استفاده واقعی: اتصال رسمی Meta، چالش GET و بررسی امضا روی بدنه خام، ثبت ورودی پایدار، قفل اتمی/یکتایی و تست هم‌زمانی لازم است.\n\nفایل START_HERE_FA.md را بخوانید.",
+        "width": 660,
+        "height": 410
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "SELECT_TEST_APPROVALS_TABLE"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "approval_ref",
+              "keyValue": "={{ $(\"Approval Input\").first().json.approval_ref }}",
+              "condition": "eq"
+            }
+          ]
+        },
+        "resource": "row",
+        "returnAll": true
+      },
+      "id": "9a3bb6b9-bd92-43a9-8f55-c184c5f2c330",
+      "name": "Get Approval",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "SELECT_TEST_MESSAGES_TABLE"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "account_id",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Get Message\").first().json.account_id || \"__MISSING__\" }}"
+            },
+            {
+              "keyName": "conversation_id",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Get Message\").first().json.conversation_id || \"__MISSING__\" }}"
+            }
+          ]
+        },
+        "resource": "row",
+        "returnAll": true
+      },
+      "id": "31c7845f-8104-4ecb-b1c6-22a63a9bf26d",
+      "name": "Get Conversation Messages",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        700,
+        0
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "db18f4d9-50bd-4137-b1cf-a6ed4ee26427",
+              "leftValue": "={{ $json.valid_context }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "eefe1804-93d6-4b37-9eb0-d739847a55ca",
+      "name": "Context Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const c=$('Build Context').first().json;return [{json:{approval_ref:c.approval_ref,final_status:'blocked_validation',reasons:c.block_reasons,simulated:false}}];"
+      },
+      "id": "3088baf3-41aa-4b70-af90-329f76b1bb2b",
+      "name": "Result: Invalid Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{json:{approval_ref:$('Build Context').first().json.approval_ref,final_status:'blocked_live_not_commissioned',simulated:false}}];"
+      },
+      "id": "83fa0cba-ccdb-482e-81ad-25810daa251d",
+      "name": "Result: Live Send Blocked",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1900,
+        450
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Approval Input": {
+      "main": [
+        [
+          {
+            "node": "Get Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Message": {
+      "main": [
+        [
+          {
+            "node": "Get Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Settings": {
+      "main": [
+        [
+          {
+            "node": "Get Conversation Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Context": {
+      "main": [
+        [
+          {
+            "node": "Context Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Acquire Lock": {
+      "main": [
+        [
+          {
+            "node": "Lock Acquired?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lock Acquired?": {
+      "main": [
+        [
+          {
+            "node": "Simulate Update (Approval)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Result: Not Approved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kill Switch On?": {
+      "main": [
+        [
+          {
+            "node": "Result: Blocked",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Within Messaging Window?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Within Messaging Window?": {
+      "main": [
+        [
+          {
+            "node": "Test Mode?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Window Expired (Approval)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Mode?": {
+      "main": [
+        [
+          {
+            "node": "Acquire Lock",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Result: Live Send Blocked",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simulate Update (Approval)": {
+      "main": [
+        [
+          {
+            "node": "Simulate Update (Message)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simulate Update (Message)": {
+      "main": [
+        [
+          {
+            "node": "Result: Simulated",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Window Expired (Approval)": {
+      "main": [
+        [
+          {
+            "node": "Mark Window Expired (Message)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Window Expired (Message)": {
+      "main": [
+        [
+          {
+            "node": "Result: Window Expired",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Approval": {
+      "main": [
+        [
+          {
+            "node": "Get Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Conversation Messages": {
+      "main": [
+        [
+          {
+            "node": "Build Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Context Valid?": {
+      "main": [
+        [
+          {
+            "node": "Kill Switch On?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Result: Invalid Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Tehran",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "none",
+    "saveManualExecutions": false
+  }
+}

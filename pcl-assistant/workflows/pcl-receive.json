@@ -1,0 +1,145 @@
+{
+  "id": "pcl-receive",
+  "name": "PCL A — Receive, rule router and OpenAI",
+  "active": false,
+  "nodes": [
+    {
+      "id": "schedule",
+      "name": "Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds",
+              "secondsInterval": 5
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "claim-durable-events",
+      "name": "Claim durable events",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        250,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://gateway:8080/internal/jobs/claim",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "pcl-runtime-auth",
+          "name": "PCL runtime internal API"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1500
+    },
+    {
+      "id": "each-event",
+      "name": "Each event",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        500,
+        0
+      ],
+      "parameters": {
+        "fieldToSplitOut": "jobs",
+        "options": {}
+      }
+    },
+    {
+      "id": "classify-dm-comment-or-story",
+      "name": "Classify DM comment or story",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        750,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://gateway:8080/internal/events/process",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 90000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({event_id: $json.event_id, lease: $json.lease}) }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "pcl-runtime-auth",
+          "name": "PCL runtime internal API"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1500
+    }
+  ],
+  "connections": {
+    "Schedule": {
+      "main": [
+        [
+          {
+            "node": "Claim durable events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim durable events": {
+      "main": [
+        [
+          {
+            "node": "Each event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Each event": {
+      "main": [
+        [
+          {
+            "node": "Classify DM comment or story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "none",
+    "saveManualExecutions": false,
+    "executionTimeout": 120,
+    "timezone": "Asia/Tehran",
+    "errorWorkflow": "pcl-error"
+  },
+  "pinData": {}
+}

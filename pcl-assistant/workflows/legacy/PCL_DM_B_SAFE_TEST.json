@@ -1,0 +1,1633 @@
+{
+  "name": "PCL DM - B Telegram Approval — SAFE TEST",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "callback_query",
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "id": "d50be9e3-a933-4390-abd6-5743b1af5d78",
+      "name": "Telegram Update",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.5,
+      "position": [
+        0,
+        672
+      ],
+      "webhookId": "48d43b0d-d24f-407f-b5ef-7fd19601b917"
+    },
+    {
+      "parameters": {
+        "jsCode": "const u=$json.body || $json || {};\n const cq=u.callback_query;\n const m=cq?.message || u.message || {};\n const user=cq?.from || u.message?.from || {};\n const match=/^(apv|edt|rej):([A-Za-z0-9_-]{1,32}):([1-9]\\d{0,5})$/.exec(String(cq?.data || ''));\n return [{json:{update_type:cq?'callback':u.message?'message':'other',from_user_id:String(user.id || ''),is_bot:user.is_bot===true,chat_id:String(m.chat?.id || ''),chat_type:m.chat?.type || '',action:match?match[1]:'',approval_ref:match?match[2]:'',callback_version:match?Number(match[3]):0,callback_query_id:String(cq?.id || ''),tg_message_id:String(m.message_id || ''),reply_to_message_id:String(m.reply_to_message?.message_id || ''),text:typeof m.text==='string'?m.text:''}}];"
+      },
+      "id": "777966db-88bc-464c-9109-d93a757afcba",
+      "name": "Parse Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        736,
+        784
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "SELECT_TEST_SETTINGS_TABLE"
+        },
+        "returnAll": true,
+        "resource": "row"
+      },
+      "id": "aae73de6-67de-42a3-82b1-e890ddb554c3",
+      "name": "Get Settings",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        960,
+        784
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const settings={};let duplicate=false;\n for(const {json:j} of $('Get Settings').all()){if(j.setting_key==null)continue;if(Object.hasOwn(settings,j.setting_key))duplicate=true;settings[j.setting_key]=j.setting_value;}\n const p=$('Parse Update').first().json;\n const owner=String(settings.TELEGRAM_OWNER_USER_ID || '');const chat=String(settings.TELEGRAM_OWNER_CHAT_ID || '');\n const authorized=!duplicate&&/^\\d+$/.test(owner)&&chat===owner&&p.from_user_id===owner&&p.chat_id===chat&&p.chat_type==='private'&&!p.is_bot;\n return [{json:{...p,authorized,owner_user_id:owner,owner_chat_id:chat}}];"
+      },
+      "id": "dfe33d5f-ac5f-4d0d-88b4-b292bf07fd72",
+      "name": "Authorize",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1184,
+        784
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "auth",
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "854ef340-a3d6-4f53-8280-42bf9ebc90e6",
+      "name": "Authorized?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1408,
+        784
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "iscb",
+              "leftValue": "={{ $(\"Parse Update\").first().json.update_type }}",
+              "rightValue": "callback",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b5a88713-dfcd-40af-bc66-3c0f27807c4d",
+      "name": "Is Callback?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1632,
+        688
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "SELECT_TEST_APPROVALS_TABLE"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "approval_ref",
+              "keyValue": "={{ $(\"Parse Update\").first().json.approval_ref }}",
+              "condition": "eq"
+            }
+          ]
+        },
+        "resource": "row",
+        "returnAll": true
+      },
+      "id": "a2e5c850-371f-42e9-8bce-1180c3c10bae",
+      "name": "Get Approval",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1344,
+        384
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const p=$('Parse Update').first().json;\n const matches=$('Get Approval').all().map(x=>x.json).filter(j=>j.id!=null&&String(j.approval_ref)===p.approval_ref);\n const row=matches.length===1?matches[0]:null;\n const expiry=Date.parse(row?.expires_at || '');\n const expired=!Number.isFinite(expiry)||expiry<=Date.now();\n const actionable=$('Authorize').first().json.authorized===true&&!!row&&!expired&&row.status==='awaiting_approval'&&String(row.awaiting_edit).toLowerCase()!=='true'&&Number(row.draft_version)===p.callback_version&&String(row.telegram_message_id || '')===p.tg_message_id&&['apv','rej','edt'].includes(p.action);\n return [{json:{...p,row_id:row?.id,exists:!!row,expired,status:row?.status || '',actionable,provider_message_id:row?.provider_message_id || '',sender_id:row?.sender_id || '',draft_reply_fa:row?.draft_reply_fa || '',category:row?.category || '',draft_version:Number(row?.draft_version || 0)}}];"
+      },
+      "id": "2e95a2be-abd5-4f85-b4f7-322d0c48b3fa",
+      "name": "Eval Callback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "act",
+              "leftValue": "={{ $json.actionable }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "620919f4-455b-477e-a9de-2fb86b2c7cba",
+      "name": "Actionable?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1792,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "apv",
+              "leftValue": "={{ $(\"Eval Callback\").first().json.action }}",
+              "rightValue": "apv",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4f8b5ab4-69de-4dd2-9d9f-385ea40edf19",
+      "name": "Approve?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2016,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "SELECT_TEST_APPROVALS_TABLE"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Eval Callback\").first().json.row_id }}"
+            },
+            {
+              "keyName": "approval_ref",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Eval Callback\").first().json.approval_ref }}"
+            },
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "awaiting_approval"
+            },
+            {
+              "keyName": "draft_version",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Eval Callback\").first().json.draft_version }}"
+            },
+            {
+              "keyName": "telegram_message_id",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Eval Callback\").first().json.tg_message_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "approved",
+            "decided_by": "={{ $(\"Authorize\").first().json.owner_user_id }}",
+            "decided_at": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {},
+        "resource": "row"
+      },
+      "id": "bf13add3-93e7-475a-b5c1-45d1266c9ce8",
+      "name": "Set Approved",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2240,
+        0
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "SELECT_IMPORTED_PCL_C_SAFE_TEST"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "approval_ref": "={{ $(\"Eval Callback\").first().json.approval_ref }}",
+            "draft_version": "={{ String($(\"Eval Callback\").first().json.draft_version) }}"
+          },
+          "schema": [
+            {
+              "id": "approval_ref",
+              "displayName": "approval_ref",
+              "required": true,
+              "display": true,
+              "type": "string"
+            },
+            {
+              "id": "draft_version",
+              "displayName": "draft_version",
+              "required": true,
+              "display": true,
+              "type": "string"
+            }
+          ],
+          "matchingColumns": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "f6c1f727-99bb-4f26-bb05-700109541989",
+      "name": "Invoke Send (C)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2464,
+        0
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "callback",
+        "queryId": "={{ $(\"Eval Callback\").first().json.callback_query_id }}",
+        "additionalFields": {
+          "text": "در حال پردازش ارسال..."
+        }
+      },
+      "id": "e27f1cb2-0c64-4cae-b879-7ac8585c9133",
+      "name": "Answer: Approved",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2688,
+        0
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "editMessageText",
+        "chatId": "={{ $(\"Eval Callback\").first().json.chat_id }}",
+        "messageId": "={{ $(\"Eval Callback\").first().json.tg_message_id }}",
+        "text": "=🧪 نتیجه پردازش: {{ $(\"Invoke Send (C)\").first().json.final_status || \"خطای پردازش؛ گزارش اجرا و جدول‌ها بررسی شوند\" }}\nهیچ ارسال واقعی در این نسخه انجام نمی‌شود.\nکد: {{ $(\"Eval Callback\").first().json.approval_ref }}",
+        "additionalFields": {
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "450aa05f-9138-4444-898b-4fe84d20f3ce",
+      "name": "Edit: Approved",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2912,
+        0
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const r=$('Invoke Send (C)').first().json;return [{json:{outcome:'approval_processed',approval_ref:$('Eval Callback').first().json.approval_ref,send_status:r.final_status || 'processing_error',simulated:r.simulated===true}}];"
+      },
+      "id": "a760ae7b-53a4-4e47-8c3a-0176d72f35b0",
+      "name": "Result: Approved",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3136,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "rej",
+              "leftValue": "={{ $(\"Eval Callback\").first().json.action }}",
+              "rightValue": "rej",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "13f21f80-77e9-48d5-92f0-0dbf7ae57fe0",
+      "name": "Reject?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2240,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "SELECT_TEST_APPROVALS_TABLE"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Eval Callback\").first().json.row_id }}"
+            },
+            {
+              "keyName": "approval_ref",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Eval Callback\").first().json.approval_ref }}"
+            },
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "awaiting_approval"
+            },
+            {
+              "keyName": "draft_version",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Eval Callback\").first().json.draft_version }}"
+            },
+            {
+              "keyName": "telegram_message_id",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Eval Callback\").first().json.tg_message_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "rejected",
+            "decided_by": "={{ $(\"Authorize\").first().json.owner_user_id }}",
+            "decided_at": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {},
+        "resource": "row"
+      },
+      "id": "1288b7c5-3e18-4984-b049-b65c8581ee3a",
+      "name": "Set Rejected (Approval)",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2464,
+        192
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "SELECT_TEST_MESSAGES_TABLE"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "approval_ref",
+              "keyValue": "={{ $(\"Eval Callback\").first().json.approval_ref }}",
+              "condition": "eq"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "rejected"
+          }
+        },
+        "options": {},
+        "resource": "row"
+      },
+      "id": "2ac2b1d1-a9e6-492c-9b19-5d9db7874301",
+      "name": "Set Rejected (Message)",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2688,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "callback",
+        "queryId": "={{ $(\"Eval Callback\").first().json.callback_query_id }}",
+        "additionalFields": {
+          "text": "پاسخ رد شد."
+        }
+      },
+      "id": "de4d1799-e057-4c5b-b298-6fd269bb5ada",
+      "name": "Answer: Rejected",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2912,
+        192
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "editMessageText",
+        "chatId": "={{ $(\"Eval Callback\").first().json.chat_id }}",
+        "messageId": "={{ $(\"Eval Callback\").first().json.tg_message_id }}",
+        "text": "=❌ این پاسخ رد شد و ارسال نمی‌شود.\n🔖 کد پیگیری: {{ $(\"Eval Callback\").first().json.approval_ref }}",
+        "additionalFields": {
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "c3fe7721-6f9b-4b49-b7e6-aad5b734185e",
+      "name": "Edit: Rejected",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3136,
+        192
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { outcome: 'rejected', approval_ref: $(\"Eval Callback\").first().json.approval_ref } }];"
+      },
+      "id": "10aafae5-014c-4f0a-9804-406ff5473b85",
+      "name": "Result: Rejected",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3360,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "edt",
+              "leftValue": "={{ $(\"Eval Callback\").first().json.action }}",
+              "rightValue": "edt",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a68ac945-2ede-44d3-8135-05800aa5f10a",
+      "name": "Edit Action?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2464,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "SELECT_TEST_APPROVALS_TABLE"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Eval Callback\").first().json.row_id }}"
+            },
+            {
+              "keyName": "approval_ref",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Eval Callback\").first().json.approval_ref }}"
+            },
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "awaiting_approval"
+            },
+            {
+              "keyName": "draft_version",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Eval Callback\").first().json.draft_version }}"
+            },
+            {
+              "keyName": "telegram_message_id",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Eval Callback\").first().json.tg_message_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "awaiting_edit": true,
+            "status": "awaiting_edit"
+          }
+        },
+        "options": {},
+        "resource": "row"
+      },
+      "id": "36ede41c-b147-4bbe-bdc2-6789b1f9e2cd",
+      "name": "Set Awaiting Edit",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2688,
+        384
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "resource": "callback",
+        "queryId": "={{ $(\"Eval Callback\").first().json.callback_query_id }}",
+        "additionalFields": {
+          "text": "متن اصلاح‌شده را ارسال کنید."
+        }
+      },
+      "id": "46a65335-c34e-4216-b660-aec0d10c48a4",
+      "name": "Answer: Edit Prompt",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2912,
+        384
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "editMessageText",
+        "chatId": "={{ $(\"Eval Callback\").first().json.chat_id }}",
+        "messageId": "={{ $(\"Eval Callback\").first().json.tg_message_id }}",
+        "text": "={{ (()=>{const e=s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');const c=$(\"Eval Callback\").first().json;return '✏️ روی همین پیام Reply بزن و متن کامل پاسخ جایگزین را بفرست. پیام بدون Reply اعمال نمی‌شود.\\n\\nپیش‌نویس:\\n'+e(c.draft_reply_fa)+'\\nکد: '+e(c.approval_ref);})() }}",
+        "additionalFields": {
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "84756aa4-f63d-4b4f-b95e-bd7a536f0c3d",
+      "name": "Edit: Prompt",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3136,
+        384
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { outcome: 'awaiting_edit', approval_ref: $(\"Eval Callback\").first().json.approval_ref } }];"
+      },
+      "id": "448527c9-a39b-43a0-8bda-2b029763e468",
+      "name": "Result: Edit Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3360,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "callback",
+        "queryId": "={{ $(\"Eval Callback\").first().json.callback_query_id }}",
+        "additionalFields": {
+          "text": "دستور نامعتبر است."
+        }
+      },
+      "id": "0e3b2855-94a6-47ec-879c-ee842475d3ed",
+      "name": "Answer: Unknown",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2688,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { outcome: 'unknown_action', action: $(\"Eval Callback\").first().json.action } }];"
+      },
+      "id": "cfe5fcc5-5cdb-4ec7-83ba-ec12b4dd97dc",
+      "name": "Result: Unknown Action",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2912,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "callback",
+        "queryId": "={{ $(\"Eval Callback\").first().json.callback_query_id }}",
+        "additionalFields": {
+          "show_alert": true,
+          "text": "این درخواست منقضی یا قبلاً پردازش شده است."
+        }
+      },
+      "id": "c18d7dfc-1a1c-459c-b03d-e56b6d82361d",
+      "name": "Answer: Not Actionable",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2016,
+        672
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { outcome: 'not_actionable', approval_ref: $(\"Eval Callback\").first().json.approval_ref, status: $(\"Eval Callback\").first().json.status } }];"
+      },
+      "id": "97313478-894f-4b19-bf31-7e0c749fdbe4",
+      "name": "Result: Not Actionable",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2464,
+        672
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "SELECT_TEST_APPROVALS_TABLE"
+        },
+        "returnAll": true,
+        "resource": "row",
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "awaiting_edit"
+            },
+            {
+              "keyName": "telegram_message_id",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Parse Update\").first().json.reply_to_message_id }}"
+            }
+          ]
+        }
+      },
+      "id": "3ce7d7d5-96b6-4b8f-bcfd-393511653152",
+      "name": "Get Awaiting Edit",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1344,
+        960
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const p=$('Parse Update').first().json;\n const rows=$('Get Awaiting Edit').all().map(x=>x.json).filter(j=>j.id!=null&&j.status==='awaiting_edit'&&String(j.awaiting_edit).toLowerCase()==='true'&&String(j.telegram_message_id || '')===p.reply_to_message_id);\n const row=rows.length===1?rows[0]:null;\n const expiry=Date.parse(row?.expires_at || '');\n const new_text=p.text;\n const has_pending=$('Authorize').first().json.authorized===true&&p.update_type==='message'&&Boolean(p.reply_to_message_id)&&!!row&&Number.isFinite(expiry)&&expiry>Date.now()&&Boolean(new_text.trim())&&new_text.length<=1000&&Number.isInteger(Number(row.draft_version))&&Number(row.draft_version)>0;\n return [{json:{has_pending,row_id:row?.id,approval_ref:row?.approval_ref || '',provider_message_id:row?.provider_message_id || '',sender_id:row?.sender_id || '',category:row?.category || '',old_version:Number(row?.draft_version || 0),new_version:Number(row?.draft_version || 0)+1,new_text,chat_id:p.chat_id,reply_to_message_id:p.reply_to_message_id}}];"
+      },
+      "id": "e2afb210-6ed0-494d-a044-e7d9557ae319",
+      "name": "Eval Edit",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        960
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "pending",
+              "leftValue": "={{ $json.has_pending }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "49eabade-1bf5-44ee-b3fd-4da305330fbb",
+      "name": "Has Pending Edit?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1792,
+        960
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "SELECT_TEST_APPROVALS_TABLE"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Eval Edit\").first().json.row_id }}"
+            },
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "awaiting_edit"
+            },
+            {
+              "keyName": "draft_version",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Eval Edit\").first().json.old_version }}"
+            },
+            {
+              "keyName": "telegram_message_id",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Eval Edit\").first().json.reply_to_message_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "draft_reply_fa": "={{ $(\"Eval Edit\").first().json.new_text }}",
+            "draft_version": "={{ $(\"Eval Edit\").first().json.new_version }}",
+            "awaiting_edit": false,
+            "status": "awaiting_approval",
+            "telegram_message_id": null
+          }
+        },
+        "options": {},
+        "resource": "row"
+      },
+      "id": "7d4cbca8-3e50-4b5d-b9b5-46540a806240",
+      "name": "Update Approval (Edit)",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2016,
+        864
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "SELECT_TEST_MESSAGES_TABLE"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "approval_ref",
+              "keyValue": "={{ $(\"Eval Edit\").first().json.approval_ref }}",
+              "condition": "eq"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "draft_reply_fa": "={{ $(\"Eval Edit\").first().json.new_text }}",
+            "draft_version": "={{ $(\"Eval Edit\").first().json.new_version }}"
+          }
+        },
+        "options": {},
+        "resource": "row"
+      },
+      "id": "12261d22-7551-412a-8928-66d19de3dbd6",
+      "name": "Update Message (Edit)",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2240,
+        864
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $(\"Eval Edit\").first().json.chat_id }}",
+        "text": "={{ (()=>{const e=s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');const c=$(\"Eval Edit\").first().json;return '🧪 پیش‌نویس اصلاح‌شده — ارسال واقعی مسدود\\nفرستنده: '+e(c.sender_id)+'\\nنسخه: '+c.new_version+'\\n\\n'+e(c.new_text)+'\\n\\nکد: '+e(c.approval_ref)+'\\nبرای شبیه‌سازی باید دوباره تأیید کنی.';})() }}",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "✅ تأیید و ارسال",
+                    "additionalFields": {
+                      "callback_data": "=apv:{{ $(\"Eval Edit\").first().json.approval_ref }}:{{ $(\"Eval Edit\").first().json.new_version }}"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "✏️ اصلاح پاسخ",
+                    "additionalFields": {
+                      "callback_data": "=edt:{{ $(\"Eval Edit\").first().json.approval_ref }}:{{ $(\"Eval Edit\").first().json.new_version }}"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "❌ رد",
+                    "additionalFields": {
+                      "callback_data": "=rej:{{ $(\"Eval Edit\").first().json.approval_ref }}:{{ $(\"Eval Edit\").first().json.new_version }}"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "1a9c15cc-d86b-4fca-942f-3ab0c6ed63f5",
+      "name": "Send Updated Approval",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2464,
+        864
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "SELECT_TEST_APPROVALS_TABLE"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "approval_ref",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Eval Edit\").first().json.approval_ref }}"
+            },
+            {
+              "keyName": "draft_version",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Eval Edit\").first().json.new_version }}"
+            },
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "awaiting_approval"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telegram_message_id": "={{ $(\"Send Updated Approval\").first().json.result?.message_id ?? $(\"Send Updated Approval\").first().json.message_id }}"
+          }
+        },
+        "options": {},
+        "resource": "row"
+      },
+      "id": "0503bceb-9797-4244-8a82-5c9cd3b97c0e",
+      "name": "Update Edited TG ID",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2688,
+        864
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { outcome: 'draft_edited', approval_ref: $(\"Eval Edit\").first().json.approval_ref, new_version: $(\"Eval Edit\").first().json.new_version } }];"
+      },
+      "id": "412b5923-8851-425d-88de-baa1e5357b55",
+      "name": "Result: Edited",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2912,
+        864
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { outcome: 'ignored_no_pending_edit' } }];"
+      },
+      "id": "30844312-0d86-4b14-b1a1-f96e03c196fa",
+      "name": "Ignore Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2016,
+        1056
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { outcome: 'ignored_unauthorized', from_user_id: $(\"Parse Update\").first().json.from_user_id } }];"
+      },
+      "id": "6443dbef-54d9-424f-a170-a08560d1c209",
+      "name": "Ignore Unauthorized",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1632,
+        880
+      ]
+    },
+    {
+      "id": "bf71c5e9-102b-455e-902f-880f52e5370c",
+      "name": "READ FIRST — SAFE TEST ONLY",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        -650
+      ],
+      "parameters": {
+        "content": "## فقط تست — نه راه‌اندازی نهایی\n\nاین نسخه غیرفعال است. اطلاعات اتصال و جدول‌های تست را باید انتخاب کنید. اعتبار AI Builder لازم نیست، اما اجرای n8n و مدل ممکن است سهمیه/هزینه جدا داشته باشد.\n\n**هیچ دایرکتی در این نسخه ارسال نمی‌شود.**\n\nA: ورودی نمونه دستی؛ وب‌هوک واقعی مسدود است.\nB: تأیید فقط در چت خصوصی مالک، با نسخه و شناسه پیام.\nC: شبیه‌سازی بدون اتصال ارسال Instagram.\n\nقبل از استفاده واقعی: اتصال رسمی Meta، چالش GET و بررسی امضا روی بدنه خام، ثبت ورودی پایدار، قفل اتمی/یکتایی و تست هم‌زمانی لازم است.\n\nفایل START_HERE_FA.md را بخوانید.",
+        "width": 660,
+        "height": 410
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows=$input.all().map(x=>x.json).filter(j=>j.id!=null);const c=$('Eval Callback').first().json;if(rows.length!==1||String(rows[0].id)!==String(c.row_id)||rows[0].status!==\"approved\"||Number(rows[0].draft_version)!==c.draft_version)throw Error('PCL_TRANSITION_NOT_APPLIED: no automatic retry; inspect record.');return [{json:rows[0]}];"
+      },
+      "id": "785c01aa-afe2-4734-be08-5df57e2a3dd5",
+      "name": "Check approved Transition",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows=$input.all().map(x=>x.json).filter(j=>j.id!=null);const c=$('Eval Callback').first().json;if(rows.length!==1||String(rows[0].id)!==String(c.row_id)||rows[0].status!==\"rejected\"||Number(rows[0].draft_version)!==c.draft_version)throw Error('PCL_TRANSITION_NOT_APPLIED: no automatic retry; inspect record.');return [{json:rows[0]}];"
+      },
+      "id": "c24b6bfa-dffa-4824-b855-34b0e197d01a",
+      "name": "Check rejected Transition",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows=$input.all().map(x=>x.json).filter(j=>j.id!=null);const c=$('Eval Callback').first().json;if(rows.length!==1||String(rows[0].id)!==String(c.row_id)||rows[0].status!==\"awaiting_edit\"||Number(rows[0].draft_version)!==c.draft_version)throw Error('PCL_TRANSITION_NOT_APPLIED: no automatic retry; inspect record.');return [{json:rows[0]}];"
+      },
+      "id": "7f15c9c6-404e-4654-8341-4e1b21356c4f",
+      "name": "Check awaiting_edit Transition",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const c=$('Eval Edit').first().json;\n const rows=$input.all().map(x=>x.json).filter(j=>j.id!=null);\n if(rows.length!==1||String(rows[0].id)!==String(c.row_id)||Number(rows[0].draft_version)!==c.new_version||rows[0].status!=='awaiting_approval'||rows[0].draft_reply_fa!==c.new_text)throw Error('PCL_EDIT_NOT_APPLIED: inspect record; do not retry blindly.');\n return [{json:rows[0]}];"
+      },
+      "id": "63776ab0-6b08-47bc-b837-e692cd53ed79",
+      "name": "Check Edit Transition",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2100,
+        800
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Telegram Update": {
+      "main": [
+        [
+          {
+            "node": "Parse Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Update": {
+      "main": [
+        [
+          {
+            "node": "Get Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Settings": {
+      "main": [
+        [
+          {
+            "node": "Authorize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorize": {
+      "main": [
+        [
+          {
+            "node": "Authorized?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorized?": {
+      "main": [
+        [
+          {
+            "node": "Is Callback?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ignore Unauthorized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Callback?": {
+      "main": [
+        [
+          {
+            "node": "Get Approval",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Awaiting Edit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Approval": {
+      "main": [
+        [
+          {
+            "node": "Eval Callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Eval Callback": {
+      "main": [
+        [
+          {
+            "node": "Actionable?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Actionable?": {
+      "main": [
+        [
+          {
+            "node": "Approve?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Answer: Not Actionable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approve?": {
+      "main": [
+        [
+          {
+            "node": "Set Approved",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reject?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Approved": {
+      "main": [
+        [
+          {
+            "node": "Check approved Transition",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invoke Send (C)": {
+      "main": [
+        [
+          {
+            "node": "Edit: Approved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Answer: Approved": {
+      "main": [
+        [
+          {
+            "node": "Invoke Send (C)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit: Approved": {
+      "main": [
+        [
+          {
+            "node": "Result: Approved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reject?": {
+      "main": [
+        [
+          {
+            "node": "Set Rejected (Approval)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Edit Action?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Rejected (Approval)": {
+      "main": [
+        [
+          {
+            "node": "Check rejected Transition",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Rejected (Message)": {
+      "main": [
+        [
+          {
+            "node": "Edit: Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Answer: Rejected": {
+      "main": [
+        [
+          {
+            "node": "Set Rejected (Message)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit: Rejected": {
+      "main": [
+        [
+          {
+            "node": "Result: Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Action?": {
+      "main": [
+        [
+          {
+            "node": "Set Awaiting Edit",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Answer: Unknown",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Awaiting Edit": {
+      "main": [
+        [
+          {
+            "node": "Check awaiting_edit Transition",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Answer: Edit Prompt": {
+      "main": [
+        [
+          {
+            "node": "Edit: Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit: Prompt": {
+      "main": [
+        [
+          {
+            "node": "Result: Edit Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Answer: Unknown": {
+      "main": [
+        [
+          {
+            "node": "Result: Unknown Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Answer: Not Actionable": {
+      "main": [
+        [
+          {
+            "node": "Result: Not Actionable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Awaiting Edit": {
+      "main": [
+        [
+          {
+            "node": "Eval Edit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Eval Edit": {
+      "main": [
+        [
+          {
+            "node": "Has Pending Edit?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Pending Edit?": {
+      "main": [
+        [
+          {
+            "node": "Update Approval (Edit)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ignore Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Approval (Edit)": {
+      "main": [
+        [
+          {
+            "node": "Check Edit Transition",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Message (Edit)": {
+      "main": [
+        [
+          {
+            "node": "Send Updated Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Updated Approval": {
+      "main": [
+        [
+          {
+            "node": "Update Edited TG ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Edited TG ID": {
+      "main": [
+        [
+          {
+            "node": "Result: Edited",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check approved Transition": {
+      "main": [
+        [
+          {
+            "node": "Answer: Approved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check rejected Transition": {
+      "main": [
+        [
+          {
+            "node": "Answer: Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check awaiting_edit Transition": {
+      "main": [
+        [
+          {
+            "node": "Answer: Edit Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Edit Transition": {
+      "main": [
+        [
+          {
+            "node": "Update Message (Edit)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Tehran",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "none",
+    "saveManualExecutions": false
+  }
+}

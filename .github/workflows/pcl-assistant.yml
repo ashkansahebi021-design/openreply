@@ -1,0 +1,25 @@
+name: PCL Assistant
+on:
+  pull_request:
+    paths: ['pcl-assistant/**', '.github/workflows/pcl-assistant.yml']
+  push:
+    paths: ['pcl-assistant/**', '.github/workflows/pcl-assistant.yml']
+permissions:
+  contents: read
+jobs:
+  runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Integration and safety tests
+        working-directory: pcl-assistant
+        run: python -m unittest discover -s tests -v
+      - name: Validate generated workflows
+        working-directory: pcl-assistant
+        run: |
+          python scripts/build_workflows.py
+          python scripts/doctor.py
+          git diff --exit-code -- workflows

@@ -1,0 +1,8 @@
+.env
+.env.*
+data
+.venv
+__pycache__
+.git
+tests
+workflows/legacy
