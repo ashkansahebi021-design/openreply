@@ -1,0 +1,9 @@
+{$PUBLIC_HOST} {
+  @allowed path /webhooks/meta /webhooks/telegram /health
+  handle @allowed {
+    reverse_proxy gateway:8080
+  }
+  handle {
+    respond "Not found" 404
+  }
+}

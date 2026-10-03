@@ -1,0 +1,71 @@
+{
+  "id": "pcl-error",
+  "name": "PCL E — Error alert",
+  "active": false,
+  "nodes": [
+    {
+      "id": "workflow-error",
+      "name": "Workflow error",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "alert-owner",
+      "name": "Alert owner",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        250,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://gateway:8080/internal/alerts",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 90000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({execution_id: $json.execution?.id || \"unknown\"}) }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "pcl-runtime-auth",
+          "name": "PCL runtime internal API"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1500
+    }
+  ],
+  "connections": {
+    "Workflow error": {
+      "main": [
+        [
+          {
+            "node": "Alert owner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "none",
+    "saveManualExecutions": false,
+    "executionTimeout": 120,
+    "timezone": "Asia/Tehran"
+  },
+  "pinData": {}
+}

@@ -45,6 +45,8 @@ class Engine:
                 db.execute('INSERT OR IGNORE INTO conversations(user_id) VALUES(?)',(e['user_id'],))
                 db.execute('UPDATE conversations SET version=version+1,username=CASE WHEN ? != \'\' THEN ? ELSE username END,last_interaction=MAX(last_interaction,?),last_inbound=MAX(last_inbound,?) WHERE user_id=?',
                            (e['username'],e['username'],e['timestamp'],e['timestamp'] if e['kind']!='comment' else 0,e['user_id']))
+                version=db.execute('SELECT version FROM conversations WHERE user_id=?',(e['user_id'],)).fetchone()['version']
+                db.execute('UPDATE events SET conversation_version=? WHERE id=?',(version,e['id']))
                 db.execute('INSERT INTO messages(event_id,user_id,role,text,timestamp) VALUES(?,?,?,?,?)',(e['id'],e['user_id'],'user',e['text'],e['timestamp']))
                 Store.audit(db,now,e['id'],'event_received',{'kind':e['kind']})
         return {'accepted':count}
@@ -52,7 +54,7 @@ class Engine:
     def claim(self):
         now=self.clock();jobs=[]
         with self.store.transaction() as db:
-            rows=list(db.execute("SELECT id FROM events WHERE (status='pending' OR (status='processing' AND lease_until<?)) AND attempts<3 ORDER BY created,rowid LIMIT 10",(now,)))
+            rows=list(db.execute("SELECT id FROM events WHERE (status='pending' OR (status='processing' AND lease_until<?)) AND attempts<3 ORDER BY created,rowid LIMIT 3",(now,)))
             for row in rows:
                 lease=uuid.uuid4().hex
                 db.execute("UPDATE events SET status='processing',lease=?,lease_until=?,attempts=attempts+1 WHERE id=?",(lease,now+120,row['id']))
@@ -112,6 +114,10 @@ class Engine:
                 with self.store.transaction() as db:db.execute('UPDATE events SET timestamp=? WHERE id=?',(ts,e['id']))
             except APIError:pass
         conv=self.store.one('SELECT * FROM conversations WHERE user_id=?',(e['user_id'],));cv=conv['version']
+        if e['kind']!='comment' and e['conversation_version']!=cv:
+            with self.store.transaction() as db:
+                db.execute("UPDATE events SET status='superseded' WHERE id=?",(event_id,))
+            return {'status':'superseded'}
         category,confidence,reply,approval=self.decision(e)
         now=self.clock()
         if e['kind']=='comment' and not e['timestamp'] and category!='ignored':approval=True
@@ -247,7 +253,7 @@ class Engine:
 
     def dispatch(self):
         processed=0
-        for _ in range(10):
+        for _ in range(2):
             now=self.clock()
             with self.store.transaction() as db:
                 row=db.execute("SELECT * FROM outbox WHERE status='pending' AND next_at<=? ORDER BY rowid LIMIT 1",(now,)).fetchone()
@@ -276,7 +282,12 @@ class Engine:
                         db.execute('UPDATE outbox SET next_at=? WHERE id=?',(now+60,r['id']));continue
                 elif not self.s.telegram_token:
                     db.execute('UPDATE outbox SET next_at=? WHERE id=?',(now+60,r['id']));continue
-                db.execute("UPDATE outbox SET status='sending',attempts=attempts+1 WHERE id=?",(r['id'],))
+                if r['channel']=='telegram' and p.get('save_as')=='approval':
+                    a=db.execute('SELECT * FROM approvals WHERE id=?',(r['approval_id'],)).fetchone()
+                    v=int(r['id'].rsplit(':',1)[-1])
+                    if not a or a['status']!='pending' or a['version']!=v or a['expires']<=now:
+                        db.execute("UPDATE outbox SET status='blocked',error='stale_approval' WHERE id=?",(r['id'],));continue
+                db.execute("UPDATE outbox SET status='sending',started_at=?,attempts=attempts+1 WHERE id=?",(now,r['id']))
             try:
                 if e:
                     provider='simulated' if self.s.dry_run else self.clients.instagram(e,p['text'])
@@ -287,6 +298,8 @@ class Engine:
             except APIError as err:
                 status='pending' if err.kind=='rate_limit' and r['attempts']<4 else ('unknown_delivery' if err.kind=='unknown_delivery' else 'failed')
                 error=err.kind;provider=None;result={};retry=err.retry_after or 30
+            except Exception:
+                status='unknown_delivery';error='unexpected_provider_response';provider=None;result={}
             with self.store.transaction() as db:
                 db.execute('UPDATE outbox SET status=?,provider_id=?,error=?,sent_at=?,next_at=? WHERE id=?',
                            (status,provider,error,now if status in ('sent','simulated') else None,now+retry if status=='pending' else 0,r['id']))
@@ -306,6 +319,10 @@ class Engine:
     def maintenance(self):
         now=self.clock();cutoff=now-self.s.retention_days*86400
         with self.store.transaction() as db:
+            stuck=list(db.execute("SELECT id FROM outbox WHERE status='sending' AND started_at<?",(now-120,)))
+            for r in stuck:
+                db.execute("UPDATE outbox SET status='unknown_delivery',error='send_lease_expired' WHERE id=?",(r['id'],))
+                self.alert(db,'send_lease_expired',r['id'])
             users=[r['user_id'] for r in db.execute("SELECT DISTINCT user_id FROM approvals WHERE expires<=? AND status IN ('pending','editing','approved')",(now,))]
             db.execute("UPDATE approvals SET status='expired' WHERE expires<=? AND status IN ('pending','editing','approved')",(now,))
             for u in users:self.refresh_pending(db,u)

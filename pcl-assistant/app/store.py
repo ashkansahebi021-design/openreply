@@ -8,7 +8,7 @@ SCHEMA='''
 CREATE TABLE IF NOT EXISTS events (
  id TEXT PRIMARY KEY, account TEXT NOT NULL, user_id TEXT NOT NULL, username TEXT NOT NULL,
  kind TEXT NOT NULL, text TEXT NOT NULL, media_id TEXT NOT NULL, timestamp REAL NOT NULL,
- status TEXT NOT NULL DEFAULT 'pending', lease TEXT, lease_until REAL DEFAULT 0,
+ conversation_version INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'pending', lease TEXT, lease_until REAL DEFAULT 0,
  attempts INTEGER DEFAULT 0, category TEXT, confidence REAL, draft TEXT, created REAL NOT NULL);
 CREATE INDEX IF NOT EXISTS events_pending ON events(status,lease_until);
 CREATE TABLE IF NOT EXISTS conversations (
@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS approvals (
 CREATE TABLE IF NOT EXISTS outbox (
  id TEXT PRIMARY KEY, channel TEXT NOT NULL, event_id TEXT, approval_id TEXT,
  payload TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', attempts INTEGER DEFAULT 0,
- next_at REAL NOT NULL DEFAULT 0, sent_at REAL, provider_id TEXT, error TEXT);
+ next_at REAL NOT NULL DEFAULT 0, started_at REAL, sent_at REAL, provider_id TEXT, error TEXT);
 CREATE INDEX IF NOT EXISTS outbox_pending ON outbox(status,next_at);
 CREATE TABLE IF NOT EXISTS telegram_updates (
  id INTEGER PRIMARY KEY, payload TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending');

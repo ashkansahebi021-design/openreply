@@ -53,6 +53,10 @@ class Application:
         except Exception:
             # No traceback, headers, provider body or credentials in public logs.
             status=500;result={'error':'internal_error'}
+            try:
+                with self.engine.store.transaction() as db:
+                    self.engine.alert(db,'internal_error',str(int(self.engine.clock()//60)))
+            except Exception:pass
         body=(result if plain else json.dumps(result,ensure_ascii=False)).encode()
         start_response(f'{status} '+{200:'OK',400:'Bad Request',401:'Unauthorized',403:'Forbidden',404:'Not Found',405:'Method Not Allowed',413:'Payload Too Large',500:'Internal Server Error'}[status],
                        [('Content-Type','text/plain; charset=utf-8' if plain else 'application/json; charset=utf-8'),('Content-Length',str(len(body))),('Cache-Control','no-store')])
