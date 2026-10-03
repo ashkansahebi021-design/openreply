@@ -133,6 +133,9 @@ class Application:
         if method=='POST' and path=='/internal/outbox/dispatch':
             with self.dispatch_lock:return e.dispatch()
         if method=='POST' and path=='/internal/maintenance':return e.maintenance()
+        if method=='POST' and path=='/internal/prompts':
+            with e.store.transaction() as db:saved=e.public.catalog.save(db,data)
+            return {'saved':saved}
         if method=='GET' and path=='/internal/rules':return {'rules':e.store.rows('SELECT * FROM rules ORDER BY id')}
         if method=='POST' and path=='/internal/rules':
             r=validate_rule(data)

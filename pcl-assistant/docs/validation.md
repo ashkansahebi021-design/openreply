@@ -2,7 +2,7 @@
 
 ## Passed
 
-- 76 Python tests covering DM/comment/story routing, approval/edit/reject/custom reply, owner authentication, signed webhooks, concurrent deduplication, context/version guards, response windows, API rejection and ambiguous delivery, rate-limit retries, dry-run, budget limits, retention, secure Telegram commissioning, idempotent n8n provisioning, redacted diagnostics, budgeted OpenAI commissioning and cooldown retries.
+- 85 Python tests covering DM/comment/story routing, approval/edit/reject/custom reply, owner authentication, signed webhooks, concurrent deduplication, context/version guards, response windows, API rejection and ambiguous delivery, rate-limit retries, dry-run, budget limits, retention, secure Telegram commissioning, idempotent n8n provisioning, redacted diagnostics, budgeted OpenAI commissioning and cooldown retries.
 - Real n8n 2.41.6 CLI imported and executed all five workflow graphs against isolated mock providers. Production schedule/error triggers were preserved.
 - Both gateway and n8n Docker images built and deployed successfully in the owner's authorized Railway free trial. Separate persistent volumes are attached. No paid plan was purchased.
 - Live gateway HTTPS health returned 200; unsigned Telegram ingress returned 401. Authenticated diagnostics returned 200 without messages or secrets.

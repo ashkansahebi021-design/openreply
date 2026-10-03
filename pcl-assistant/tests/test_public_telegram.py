@@ -104,4 +104,51 @@ class PublicTelegramTests(unittest.TestCase):
   self.assertEqual(self.e.store.rows('SELECT * FROM public_tickets'),[])
   self.assertEqual(self.c.calls,0)
 
+ def add_prompt(self,title='وکیل',aliases=None,body='متن اصلی پرامپت',update=1):
+  self.message('/prompt\ntitle: '+title+'\naliases: '+','.join(aliases or ['حقوقی'])+'\ntext: '+body,update,999)
+ def test_prompt_natural_request_returns_original_without_ai(self):
+  self.add_prompt();self.message('من اون پرامپت وکیل رو میخوام',2);self.drain()
+  self.assertTrue(any(b.get('chat_id')=='200' and b['text']=='وکیل\n\nمتن اصلی پرامپت' for _,b in self.c.tg))
+  self.assertEqual(self.c.calls,0);self.assertIsNone(self.ticket())
+ def test_prompt_alias_and_persian_normalization(self):
+  self.add_prompt();self.message('پرامپت حقوقي میخوام',2);self.drain()
+  self.assertTrue(any(b.get('chat_id')=='200' and 'متن اصلی' in b['text'] for _,b in self.c.tg))
+ def test_prompt_ambiguous_then_exact_title_selection(self):
+  self.add_prompt('وکیل', ['حقوقی']);self.add_prompt('قرارداد نمونه',['حقوقی'],update=2)
+  self.message('پرامپت حقوقی',3);self.message('وکیل',4);self.drain()
+  answers=[b['text'] for _,b in self.c.tg if b.get('chat_id')=='200']
+  self.assertIn('چند پرامپت',answers[0]);self.assertEqual(answers[1],'وکیل\n\nمتن اصلی پرامپت')
+ def test_prompt_missing_does_not_invent_or_forward(self):
+  self.message('پرامپت وکیل میخوام');self.drain()
+  self.assertIn('هنوز پرامپت تأییدشده',self.c.tg[0][1]['text'])
+  self.assertIsNone(self.ticket());self.assertEqual(self.c.calls,0)
+ def test_prompt_owner_only_and_price_kept_sensitive(self):
+  self.message('/prompt\ntitle: جعلی\ntext: متن جعلی',1)
+  self.assertEqual(self.e.store.rows('SELECT * FROM public_prompts'),[])
+  self.add_prompt(update=2);self.message('قیمت پرامپت وکیل',3);self.drain()
+  self.assertEqual(self.ticket()['category'],'pricing')
+ def test_prompt_update_and_inactive(self):
+  from app.prompt_catalog import PromptCatalog
+  self.add_prompt();self.add_prompt(body='نسخه جدید',update=2)
+  with self.e.store.transaction() as db:
+   PromptCatalog.save(db,{'title':'وکیل','text':'نسخه جدید','aliases':[],'active':False})
+  self.message('پرامپت وکیل',3);self.drain()
+  self.assertFalse(any(b.get('chat_id')=='200' and 'نسخه جدید' in b['text'] for _,b in self.c.tg))
+ def test_prompt_long_text_split_and_deduplicated(self):
+  body='a'*8000;self.add_prompt(body=body);self.message('پرامپت وکیل',2);self.drain();self.message('پرامپت وکیل',2);self.drain()
+  answers=[b['text'] for _,b in self.c.tg if b.get('chat_id')=='200']
+  self.assertEqual(''.join(answers),'وکیل\n\n'+body);self.assertTrue(all(len(x)<=3500 for x in answers))
+ def test_prompt_invalid_registration_and_internal_api(self):
+  from app.server import Application
+  from app.prompt_catalog import PromptCatalog
+  app=Application(self.e)
+  self.assertEqual(app.internal('/internal/prompts','POST',{'title':'وکیل','text':'متن اصلی','aliases':['حقوقی']}),{'saved':'وکیل'})
+  with self.e.store.transaction() as db:
+   with self.assertRaises(ValueError):PromptCatalog.save(db,{'title':'خالی','text':''})
+
+ def test_owner_can_request_own_registered_prompt(self):
+  self.add_prompt();self.message('پرامپت وکیل رو میخوام',2,999);self.drain()
+  self.assertEqual(self.c.tg[-1][1]['text'],'وکیل\n\nمتن اصلی پرامپت')
+  self.assertIsNone(self.ticket())
+
 if __name__=='__main__':unittest.main()

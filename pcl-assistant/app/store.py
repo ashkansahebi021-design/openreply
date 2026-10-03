@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS public_tickets (
 CREATE INDEX IF NOT EXISTS public_tickets_user ON public_tickets(user_id,status);
 CREATE TABLE IF NOT EXISTS public_receipts (id INTEGER PRIMARY KEY,user_id TEXT NOT NULL,created REAL NOT NULL);
 CREATE INDEX IF NOT EXISTS public_receipts_user ON public_receipts(user_id,created);
+CREATE TABLE IF NOT EXISTS public_prompts (id TEXT PRIMARY KEY,title TEXT NOT NULL,text TEXT NOT NULL,aliases TEXT NOT NULL,active INTEGER NOT NULL DEFAULT 1);
 CREATE TABLE IF NOT EXISTS public_faqs (keyword TEXT PRIMARY KEY,response TEXT NOT NULL,active INTEGER NOT NULL DEFAULT 1);
 '''
 

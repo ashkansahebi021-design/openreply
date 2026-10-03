@@ -4,21 +4,22 @@ import re
 import uuid
 from .events import normalize_text,keyword_matches
 from .store import Store
+from .prompt_catalog import PromptCatalog
 
 WELCOME=('سلام 👋 به Persian Creative Lab خوش اومدی.\n'
          'کمک می‌کنیم با AI و ابزارهای خلاقانه، محتوای بهتر و حرفه‌ای‌تر بسازی.\n'
          'اینجا می‌تونی دربارهٔ خدمات، آموزش یا سفارش پروژه پیام بدی.\n'
          'فعلاً پاسخ‌های آماده فعال‌اند؛ سؤال‌های اختصاصی برای بررسی به تیم می‌رسند.\n'
          'این ربات در حال حاضر چت آزاد ChatGPT نیست.\n\n'
-         '/services خدمات\n/tutorial آموزش و پرامپت\n/project درخواست پروژه\n/human گفت‌وگو با تیم\n/privacy حریم خصوصی')
+         '/services خدمات\n/prompts پرامپت‌های ثبت‌شده\n/tutorial درخواست آموزش\n/project درخواست پروژه\n/human گفت‌وگو با تیم\n/privacy حریم خصوصی')
 SERVICES='تمرکز Persian Creative Lab آموزش کاربردی AI و اجرای پروژه‌های تولید محتوای خلاقانه است. برای بررسی پروژهٔ خودت، نوع محتوا و هدفت را بنویس. قیمت و شرایط را تیم پس از بررسی اعلام می‌کند.'
 SERVICE_COMMANDS={'/services','/about'}
 SERVICE_PHRASES={'خدمات','درباره ما','خدمات شما چیست','چه خدماتی دارید'}
 MENUS={'/start','/help','/menu'}
-OWNER_COMMANDS={'/status','/pause','/resume','/rules','/rule','/lead','/on','/off','/public','/tgfaq','/tgfaqs','/tgreply'}
+OWNER_COMMANDS={'/status','/pause','/resume','/rules','/rule','/lead','/prompt','/on','/off','/public','/tgfaq','/tgfaqs','/tgreply'}
 
 class PublicTelegram:
-    def __init__(self,engine):self.e=engine
+    def __init__(self,engine):self.e=engine;self.catalog=PromptCatalog(self)
 
     def send(self,db,key,user,text,**extra):
         self.e.queue(db,key,'telegram',{'method':'sendMessage','body':{'chat_id':user,'text':text},**extra})
@@ -54,6 +55,7 @@ class PublicTelegram:
         if cmd=='/privacy':
             self.send(db,key,user,'برای پیگیری درخواست، شناسهٔ تلگرام، نام کاربری و پیام‌ها در سامانهٔ PCL ذخیره و با مدیر به اشتراک گذاشته می‌شوند. متن گفتگوها معمولاً تا ۳۰ روز نگهداری می‌شود؛ رسیدهای بدون متن برای جلوگیری از ارسال تکراری باقی می‌مانند. اطلاعات بانکی، رمز یا کلید API نفرست.');return True
         category=next((c for c,words in sensitive.items() if any(keyword_matches(text,w) for w in words)),None)
+        if not category and self.catalog.answer(db,user,text,key):return True
         pending=db.execute("SELECT * FROM public_tickets WHERE user_id=? AND status IN ('pending','editing','approved') ORDER BY updated DESC LIMIT 1",(user,)).fetchone()
         # Menu requests do not modify a pending commercial inquiry or its draft.
         if not category and (cmd in SERVICE_COMMANDS or normalize_text(text) in SERVICE_PHRASES):
@@ -113,10 +115,18 @@ class PublicTelegram:
             t=db.execute("SELECT * FROM public_tickets WHERE edit_prompt_id=? AND status='editing'",(reply,)).fetchone()
             if t:
                 self.owner_reply(db,t['id'],text,update);return True
+        if (not text.startswith('/') or text=='/prompts') and self.catalog.answer(db,self.e.s.owner_id,text,'public:ownerprompt:'+str(update)):return True
         if text.split()[0].split('@')[0] in {'/start','/menu'} or normalize_text(text) in ('سلام','درود','hi','hello'):
             answer=WELCOME
         elif text.split()[0].split('@')[0] in SERVICE_COMMANDS or normalize_text(text) in SERVICE_PHRASES:
             answer=SERVICES
+        elif text.startswith('/prompt\n'):
+            try:
+                head,body=text.split('\ntext:',1)
+                fields={k.strip():v.strip() for k,v in (line.split(':',1) for line in head.splitlines()[1:] if ':' in line)}
+                saved=self.catalog.save(db,{'title':fields.get('title',''),'aliases':[a.strip() for a in fields.get('aliases','').split(',') if a.strip()],'text':body.strip()})
+                answer='پرامپت برای مخاطب‌ها ثبت شد: '+saved
+            except ValueError:answer='قالب ثبت: /prompt سپس title: نام و aliases: کلمه‌ها با ویرگول، سپس text: متن کامل در خط جدید.'
         elif text.startswith('/tgreply '):
             parts=text.split(maxsplit=2)
             answer=self.reply(db,parts[1],parts[2]) if len(parts)==3 else 'قالب: /tgreply ID متن پاسخ'
