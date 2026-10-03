@@ -19,6 +19,13 @@ class PromptCatalog:
                    (key,title.strip(),body.strip(),json.dumps(aliases,ensure_ascii=False),int(active)))
         return key
 
+    @classmethod
+    def seed(cls,db,items):
+        # Approved public assets only. Existing owner edits/disabled entries win.
+        for item in items:
+            key=normalize_text(item['title'])
+            if not db.execute('SELECT 1 FROM public_prompts WHERE id=?',(key,)).fetchone():cls.save(db,item)
+
     def answer(self,db,user,text,key):
         rows=list(db.execute('SELECT * FROM public_prompts WHERE active=1 ORDER BY title'))
         requested=keyword_matches(text,'پرامپت') or keyword_matches(text,'prompt') or text=='/prompts'

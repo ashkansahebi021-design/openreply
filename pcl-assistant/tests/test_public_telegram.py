@@ -151,4 +151,24 @@ class PublicTelegramTests(unittest.TestCase):
   self.assertEqual(self.c.tg[-1][1]['text'],'وکیل\n\nمتن اصلی پرامپت')
   self.assertIsNone(self.ticket())
 
+ def test_approved_legal_prompt_seed_is_delivered_verbatim(self):
+  import json
+  from pathlib import Path
+  items=json.loads((Path(__file__).resolve().parents[1]/'config/prompts.approved.json').read_text())
+  with self.e.store.transaction() as db:self.e.public.catalog.seed(db,items)
+  self.message('پرامپت وکیل رو میخوام');self.drain()
+  replies=[b['text'] for _,b in self.c.tg if b.get('chat_id')=='200']
+  self.assertEqual(''.join(replies),items[0]['title']+'\n\n'+items[0]['text'])
+  self.assertIn('https://t.me/persiancreativelab/6',''.join(replies))
+  self.assertIsNone(self.ticket());self.assertEqual(self.c.calls,0)
+ def test_approved_seed_preserves_owner_edits_and_disabled_state(self):
+  from app.prompt_catalog import PromptCatalog
+  asset={'title':'وکیل','text':'نسخه عمومی','aliases':['حقوقی']}
+  with self.e.store.transaction() as db:
+   PromptCatalog.seed(db,[asset])
+   PromptCatalog.save(db,{**asset,'text':'ویرایش مالک','active':False})
+   PromptCatalog.seed(db,[asset])
+  row=self.e.store.one('SELECT text,active FROM public_prompts')
+  self.assertEqual(row,{'text':'ویرایش مالک','active':0})
+
 if __name__=='__main__':unittest.main()

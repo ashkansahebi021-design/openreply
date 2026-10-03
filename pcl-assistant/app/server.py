@@ -157,7 +157,9 @@ def application(environ,start_response):
             knowledge=json.loads((root/'config/knowledge.json').read_text())
             engine=Engine(Settings.from_env(),knowledge=knowledge)
             rules=json.loads((root/'config/rules.example.json').read_text())
+            prompts=json.loads((root/'config/prompts.approved.json').read_text())
             with engine.store.transaction() as db:
+                engine.public.catalog.seed(db,prompts)
                 for rule in rules:
                     r=validate_rule(rule)
                     if not db.execute('SELECT 1 FROM rules WHERE id=?',(r['id'],)).fetchone():engine.upsert_rule(db,r)
