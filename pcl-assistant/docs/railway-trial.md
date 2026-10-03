@@ -15,3 +15,5 @@ The first n8n image pull returned HTTP 429 from docker.n8n.io. The Dockerfile us
 Both containers then deployed successfully. n8n's startup logs confirmed five published workflows. Telegram bot identity and signed webhook registration succeeded. The HTTPS gateway rejects unsigned Telegram requests with 401. Authenticated `/internal/status` reports queue counts, integration presence flags and bounded scheduler heartbeat timestamps without user messages or credentials. Use it to verify actual scheduler processing and outbox delivery; online containers alone do not prove API delivery.
 
 References: https://docs.railway.com/pricing/free-trial ; https://docs.railway.com/volumes/reference ; https://docs.n8n.io/deploy/host-n8n/configure-n8n/use-the-command-line ; https://github.com/n8n-io/n8n/pkgs/container/n8n
+
+Live diagnostics subsequently confirmed recent heartbeats for all four scheduled jobs and exactly one Telegram welcome in `sent` state. OpenAI and Meta presence flags remain false; Instagram dry-run stays enabled. The remaining Telegram commissioning check is an owner-originated `/status` message.
