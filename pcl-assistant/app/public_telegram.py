@@ -11,6 +11,9 @@ WELCOME=('سلام 👋 به Persian Creative Lab خوش اومدی.\n'
          'فعلاً پاسخ‌های آماده فعال‌اند؛ سؤال‌های اختصاصی برای بررسی به تیم می‌رسند.\n'
          'این ربات در حال حاضر چت آزاد ChatGPT نیست.\n\n'
          '/services خدمات\n/tutorial آموزش و پرامپت\n/project درخواست پروژه\n/human گفت‌وگو با تیم\n/privacy حریم خصوصی')
+SERVICES='تمرکز Persian Creative Lab آموزش کاربردی AI و اجرای پروژه‌های تولید محتوای خلاقانه است. برای بررسی پروژهٔ خودت، نوع محتوا و هدفت را بنویس. قیمت و شرایط را تیم پس از بررسی اعلام می‌کند.'
+SERVICE_COMMANDS={'/services','/about'}
+SERVICE_PHRASES={'خدمات','درباره ما','خدمات شما چیست','چه خدماتی دارید'}
 MENUS={'/start','/help','/menu'}
 OWNER_COMMANDS={'/status','/pause','/resume','/rules','/rule','/lead','/on','/off','/public','/tgfaq','/tgfaqs','/tgreply'}
 
@@ -52,9 +55,10 @@ class PublicTelegram:
             self.send(db,key,user,'برای پیگیری درخواست، شناسهٔ تلگرام، نام کاربری و پیام‌ها در سامانهٔ PCL ذخیره و با مدیر به اشتراک گذاشته می‌شوند. متن گفتگوها معمولاً تا ۳۰ روز نگهداری می‌شود؛ رسیدهای بدون متن برای جلوگیری از ارسال تکراری باقی می‌مانند. اطلاعات بانکی، رمز یا کلید API نفرست.');return True
         category=next((c for c,words in sensitive.items() if any(keyword_matches(text,w) for w in words)),None)
         pending=db.execute("SELECT * FROM public_tickets WHERE user_id=? AND status IN ('pending','editing','approved') ORDER BY updated DESC LIMIT 1",(user,)).fetchone()
+        # Menu requests do not modify a pending commercial inquiry or its draft.
+        if not category and (cmd in SERVICE_COMMANDS or normalize_text(text) in SERVICE_PHRASES):
+            self.send(db,key,user,SERVICES);return True
         if not category and not pending:
-            if cmd in ('/services','/about') or normalize_text(text) in ('خدمات','درباره ما'):
-                self.send(db,key,user,'تمرکز Persian Creative Lab آموزش کاربردی AI و اجرای پروژه‌های تولید محتوای خلاقانه است. برای بررسی پروژهٔ خودت، نوع محتوا و هدفت را بنویس. قیمت و شرایط را تیم پس از بررسی اعلام می‌کند.');return True
             faq=db.execute('SELECT response FROM public_faqs WHERE keyword=? AND active=1',(normalize_text(text),)).fetchone()
             if faq:
                 if not risky_reply.search(faq['response']):
@@ -104,11 +108,16 @@ class PublicTelegram:
 
     def owner_message(self,db,m,update):
         reply=m.get('reply_to_message',{}).get('message_id');text=m['text'].strip()
+        if not text:return False
         if reply:
             t=db.execute("SELECT * FROM public_tickets WHERE edit_prompt_id=? AND status='editing'",(reply,)).fetchone()
             if t:
                 self.owner_reply(db,t['id'],text,update);return True
-        if text.startswith('/tgreply '):
+        if text.split()[0].split('@')[0] in {'/start','/menu'} or normalize_text(text) in ('سلام','درود','hi','hello'):
+            answer=WELCOME
+        elif text.split()[0].split('@')[0] in SERVICE_COMMANDS or normalize_text(text) in SERVICE_PHRASES:
+            answer=SERVICES
+        elif text.startswith('/tgreply '):
             parts=text.split(maxsplit=2)
             answer=self.reply(db,parts[1],parts[2]) if len(parts)==3 else 'قالب: /tgreply ID متن پاسخ'
         elif text.startswith('/tgfaq\n'):

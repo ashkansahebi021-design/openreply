@@ -89,4 +89,19 @@ class PublicTelegramTests(unittest.TestCase):
   self.assertIn('پاسخ‌گویی عمومی تلگرام: True',self.c.tg[0][1]['text'])
   self.assertEqual(self.e.store.rows('SELECT * FROM public_users'),[])
 
+ def test_services_answers_while_human_inquiry_pending(self):
+  self.message('قیمت؟');self.drain();before=self.ticket();sent=len(self.c.tg)
+  self.message('خدمات',2);self.drain()
+  self.assertEqual(len(self.c.tg),sent+1)
+  self.assertEqual(self.c.tg[-1][1]['chat_id'],'200')
+  self.assertIn('تمرکز Persian Creative Lab',self.c.tg[-1][1]['text'])
+  self.assertEqual(self.ticket()['version'],before['version'])
+  self.assertEqual(self.ticket()['status'],'pending')
+ def test_owner_can_preview_welcome_and_services(self):
+  self.message('/start',1,999);self.message('خدمات',2,999);self.drain()
+  self.assertIn('چت آزاد ChatGPT نیست',self.c.tg[0][1]['text'])
+  self.assertIn('تمرکز Persian Creative Lab',self.c.tg[1][1]['text'])
+  self.assertEqual(self.e.store.rows('SELECT * FROM public_tickets'),[])
+  self.assertEqual(self.c.calls,0)
+
 if __name__=='__main__':unittest.main()
