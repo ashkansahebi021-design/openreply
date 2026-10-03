@@ -1,0 +1,4 @@
+[
+  {"id":"lawyer-demo","trigger":"comment","media_id":"1234567890","keyword":"وکیل","response":"سلام، آموزش و پرامپت مربوط به وکیل رو برات فرستادم...","approval":false,"active":false,"priority":0},
+  {"id":"story-tutorial-demo","trigger":"story","media_id":"*","keyword":"آموزش","response":"سلام! لینک آموزش پس از تأیید مالک اینجا قرار می‌گیرد.","approval":true,"active":false,"priority":0}
+]

@@ -1,0 +1,42 @@
+services:
+  gateway:
+    build: .
+    env_file: .env
+    restart: unless-stopped
+    volumes:
+      - pcl_data:/data
+    ports:
+      - '127.0.0.1:8080:8080'
+    healthcheck:
+      test: ['CMD', 'python', '-c', "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    security_opt: ['no-new-privileges:true']
+  n8n:
+    image: ${N8N_IMAGE:?Select a verified n8n image}
+    restart: unless-stopped
+    environment:
+      N8N_HOST: ${N8N_HOST:-localhost}
+      N8N_PORT: '5678'
+      N8N_PROTOCOL: https
+      WEBHOOK_URL: ${N8N_WEBHOOK_URL:-http://localhost:5678/}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?Set encryption key}
+      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: 'true'
+      N8N_DIAGNOSTICS_ENABLED: 'false'
+      EXECUTIONS_DATA_SAVE_ON_SUCCESS: none
+      EXECUTIONS_DATA_SAVE_ON_ERROR: none
+      EXECUTIONS_DATA_PRUNE: 'true'
+      EXECUTIONS_DATA_MAX_AGE: '24'
+      GENERIC_TIMEZONE: Asia/Tehran
+      TZ: Asia/Tehran
+    volumes:
+      - n8n_data:/home/node/.n8n
+    ports:
+      - '127.0.0.1:5678:5678'
+    depends_on:
+      gateway:
+        condition: service_healthy
+volumes:
+  pcl_data:
+  n8n_data:
