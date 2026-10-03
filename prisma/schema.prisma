@@ -1,4 +1,5 @@
 // ManyChat Alternative — B2B Instagram Comment → DM SaaS schema
+// Extended with PCL AI Social Assistant models
 
 generator client {
   provider = "prisma-client"
@@ -85,6 +86,16 @@ model Workspace {
   linkClicks        LinkClick[]
   webhookEvents     WebhookEvent[]
   operationalEvents OperationalEvent[]
+
+  // PCL AI Social Assistant models
+  contacts             Contact[]
+  channelIdentities    ChannelIdentity[]
+  conversations        Conversation[]
+  messages             Message[]
+  conversationHandoffs ConversationHandoff[]
+  llmProviderConfig    LLMProviderConfig?
+  knowledgeBase        KnowledgeBase[]
+  aiProcessingLogs     AIProcessingLog[]
 
   @@index([ownerId])
 }
@@ -394,7 +405,6 @@ enum OperationalEventLevel {
   ERROR
 }
 
-
 enum InstagramProvider {
   META
   ZERNIO
@@ -415,4 +425,206 @@ model ZernioConnection {
 model PostbackDelivery {
   id String @id
   createdAt DateTime @default(now())
+}
+
+// ============================================================================
+// PCL AI SOCIAL ASSISTANT MODELS
+// ============================================================================
+
+/// Represents a human contact (person interacting with Persian Creative Lab)
+model Contact {
+  id          String   @id @default(cuid())
+  workspaceId String
+
+  displayName String?
+  email       String?
+  metadata    Json     @default({})
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace         Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  channelIdentities ChannelIdentity[]
+  conversations     Conversation[]
+
+  @@index([workspaceId])
+  @@index([email])
+}
+
+/// Maps a Contact to a specific channel (Telegram user, Instagram DM user)
+model ChannelIdentity {
+  id               String   @id @default(cuid())
+  contactId        String
+  workspaceId      String
+  channel          String
+  channelUserId    String
+  channelAccountId String
+  channelUsername  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  contact       Contact        @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  conversations Conversation[]
+
+  @@unique([workspaceId, channel, channelAccountId, channelUserId])
+  @@index([contactId])
+  @@index([workspaceId])
+  @@index([channel])
+}
+
+/// Represents a conversation thread
+model Conversation {
+  id                String            @id @default(cuid())
+  workspaceId       String
+  contactId         String
+  channelIdentityId String
+  channel           String
+  state             ConversationState @default(AI_ACTIVE)
+  handledByUserId   String?
+  lastMessageAt     DateTime          @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace       Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contact         Contact           @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  channelIdentity ChannelIdentity   @relation(fields: [channelIdentityId], references: [id], onDelete: Cascade)
+  messages        Message[]
+  handoff         ConversationHandoff?
+
+  @@index([workspaceId])
+  @@index([contactId])
+  @@index([state])
+  @@index([lastMessageAt])
+  @@index([channel])
+}
+
+/// Individual message in a conversation
+model Message {
+  id               String      @id @default(cuid())
+  conversationId   String
+  workspaceId      String
+  channel          String
+  channelAccountId String
+  channelMessageId String
+  role             MessageRole
+  content          String
+  metadata         Json        @default({})
+  aiMetadata       Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([workspaceId])
+  @@index([role])
+  @@unique([workspaceId, channel, channelAccountId, channelMessageId])
+}
+
+/// Track human handoff state and details
+model ConversationHandoff {
+  id              String   @id @default(cuid())
+  conversationId  String   @unique
+  workspaceId     String
+  initiatedBy     String
+  initiatedReason String?
+  handoffAt      DateTime @default(now())
+  acknowledgedAt  DateTime?
+  acknowledgedBy  String?
+  notes          String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([handoffAt])
+}
+
+/// Configuration for LLM provider to use
+/// Secrets (API keys) remain in environment variables only
+model LLMProviderConfig {
+  id               String   @id @default(cuid())
+  workspaceId      String   @unique
+  provider         String
+  model            String
+  isEnabled        Boolean  @default(true)
+  settings         Json     @default({})
+  fallbackProvider String?
+  fallbackModel    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+}
+
+/// PCL knowledge base items
+model KnowledgeBase {
+  id             String   @id @default(cuid())
+  workspaceId    String
+  category       String
+  title          String
+  content        String
+  tags           String[]
+  relevanceScore Float    @default(1)
+  lastVerifiedAt DateTime @default(now())
+  isActive       Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([category])
+  @@index([isActive])
+}
+
+/// Track AI processing for debugging and analytics
+model AIProcessingLog {
+  id          String   @id @default(cuid())
+  conversationId String
+  messageId   String?
+  workspaceId String
+  stage       String
+  provider    String?
+  model       String?
+  latencyMs   Int?
+  inputTokens Int?
+  outputTokens Int?
+  success     Boolean
+  errorMessage String?
+  metadata    Json     @default({})
+
+  createdAt DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([conversationId])
+  @@index([stage])
+  @@index([createdAt])
+}
+
+enum ConversationState {
+  AI_ACTIVE
+  HUMAN_REQUIRED
+  HUMAN_ACTIVE
+}
+
+enum MessageRole {
+  user
+  ai
+  human
+  system
 }
