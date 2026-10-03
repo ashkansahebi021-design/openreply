@@ -2,14 +2,16 @@
 import hmac
 import json
 import threading
+from datetime import datetime,timezone
 from pathlib import Path
 from urllib.parse import parse_qs,urlsplit
 from .settings import Settings
 from .engine import Engine,validate_rule
 from .events import verify_signature
+from .clients import APIError
 
 class Application:
-    def __init__(self,engine):self.engine=engine;self.dispatch_lock=threading.Lock();self.telegram_lock=threading.Lock()
+    def __init__(self,engine):self.engine=engine;self.dispatch_lock=threading.Lock();self.telegram_lock=threading.Lock();self.ai_check_lock=threading.Lock()
 
     def __call__(self,environ,start_response):
         status=200;result={};plain=False
@@ -73,6 +75,31 @@ class Application:
                 e.store.rows("SELECT key,value FROM controls WHERE key LIKE 'scheduler:%'")},
                 'integrations_configured':{'telegram':bool(e.s.telegram_token),'openai':bool(e.s.openai_key),'meta':bool(e.s.meta_token)},
                 'dry_run':e.s.dry_run,'instagram_outbound_enabled':e.s.outbound_enabled,'meta_verified':e.s.meta_verified}
+        if method=='POST' and path=='/internal/openai/check':
+            # Fixed synthetic input, no conversation/outbox side effects or secret exposure.
+            if not e.s.openai_key:return {'ok':False,'error':'openai_not_configured'}
+            day=datetime.fromtimestamp(e.clock(),timezone.utc).date().isoformat()
+            key='openai-check:'+day+':'+e.s.model
+            with self.ai_check_lock:
+                with e.store.transaction() as db:
+                    old=db.execute('SELECT value FROM controls WHERE key=?',(key,)).fetchone()
+                    if old:return json.loads(old['value'])
+                    db.execute('INSERT OR IGNORE INTO usage(day) VALUES(?)',(day,))
+                    if db.execute('SELECT calls FROM usage WHERE day=?',(day,)).fetchone()['calls']>=e.s.ai_daily_limit:
+                        return {'ok':False,'error':'ai_budget_exhausted'}
+                    db.execute('UPDATE usage SET calls=calls+1 WHERE day=?',(day,))
+                    # Reserve before network I/O: a crash must not cause blind repeat spending.
+                    db.execute('INSERT INTO controls(key,value) VALUES(?,?)',(key,json.dumps({'ok':False,'error':'check_pending_or_interrupted'})))
+                try:
+                    decision=e.clients.ai({'text':'Persian Creative Lab چه کاری انجام می‌دهد؟','kind':'dm'},[],e.knowledge)
+                    result={'ok':True,'model':e.s.model,'category':decision['category'],'reply':decision['reply']}
+                except APIError as error:
+                    result={'ok':False,'error':error.kind,'model':e.s.model}
+                with e.store.transaction() as db:
+                    db.execute('UPDATE controls SET value=? WHERE key=?',(json.dumps(result,ensure_ascii=False),key))
+                    # Keep only the most recent commissioning check, including across model changes.
+                    db.execute("DELETE FROM controls WHERE key LIKE 'openai-check:%' AND key<>?",(key,))
+                return result
         if method=='POST' and path in ('/internal/jobs/claim','/internal/telegram/process','/internal/outbox/dispatch','/internal/maintenance'):
             # Bounded heartbeat state, not one growing audit row per five-second poll.
             with e.store.transaction() as db:

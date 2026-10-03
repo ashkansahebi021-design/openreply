@@ -22,6 +22,11 @@ class Clients:
             try:body=json.loads(e.read(8192))
             except Exception:body={}
             code=body.get('error',{}).get('code') if isinstance(body.get('error'),dict) else None
+            if url=='https://api.openai.com/v1/responses':
+                if code=='insufficient_quota':raise APIError('openai_insufficient_quota') from None
+                if e.code==401:raise APIError('openai_authentication_failed') from None
+                if e.code==403:raise APIError('openai_permission_denied') from None
+                if e.code==404:raise APIError('openai_model_unavailable') from None
             retry=e.headers.get('Retry-After','30')
             try:retry=min(3600,max(1,int(retry)))
             except ValueError:retry=30

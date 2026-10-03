@@ -144,6 +144,30 @@ class System(unittest.TestCase):
   s,_=self.http('/internal/jobs/claim');self.assertTrue(s.startswith('401'))
  def test_commission_requires_auth(self):
   s,_=self.http('/internal/telegram/commission');self.assertTrue(s.startswith('401'));self.assertEqual(self.c.tg,[])
+ def test_openai_check_auth_and_cached_no_send(self):
+  s,_=self.http('/internal/openai/check');self.assertTrue(s.startswith('401'));self.assertEqual(self.c.calls,0)
+  for _ in range(2):
+   s,b=self.http('/internal/openai/check',headers={'HTTP_AUTHORIZATION':'Bearer internal'})
+   self.assertTrue(s.startswith('200'));self.assertTrue(json.loads(b)['ok'])
+  self.assertEqual(self.c.calls,1);self.assertEqual(self.c.sent,[]);self.assertEqual(self.c.tg,[])
+  self.assertEqual(self.e.store.rows('SELECT * FROM events'),[])
+  self.assertEqual(self.e.store.one('SELECT calls FROM usage')['calls'],1)
+ def test_openai_check_missing_budget_and_error_redaction(self):
+  auth={'HTTP_AUTHORIZATION':'Bearer internal'}
+  self.s.openai_key='';_,b=self.http('/internal/openai/check',headers=auth)
+  self.assertEqual(json.loads(b)['error'],'openai_not_configured')
+  self.s.openai_key='mock';self.s.ai_daily_limit=0
+  _,b=self.http('/internal/openai/check',headers=auth);self.assertEqual(json.loads(b)['error'],'ai_budget_exhausted')
+  self.s.ai_daily_limit=100
+  with patch.object(self.c,'ai',side_effect=APIError('openai_insufficient_quota')):
+   _,b=self.http('/internal/openai/check',headers=auth)
+  self.assertEqual(json.loads(b)['error'],'openai_insufficient_quota');self.assertNotIn('mock',b.decode())
+ def test_openai_quota_errors_are_sanitized(self):
+  import urllib.error
+  error=urllib.error.HTTPError('https://api.openai.com/v1/responses',429,'secret body',{},io.BytesIO(b'{"error":{"code":"insufficient_quota","message":"private billing detail"}}'))
+  with patch('urllib.request.urlopen',side_effect=error):
+   with self.assertRaises(APIError) as caught:Clients(self.s).ai({'text':'test','kind':'dm'},[],{})
+  self.assertEqual(caught.exception.kind,'openai_insufficient_quota')
  def test_runtime_status_is_authenticated_and_redacted(self):
   s,_=self.http('/internal/status','GET');self.assertTrue(s.startswith('401'))
   s,b=self.http('/internal/status','GET',headers={'HTTP_AUTHORIZATION':'Bearer internal'})

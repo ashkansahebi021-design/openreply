@@ -17,3 +17,5 @@ Both containers then deployed successfully. n8n's startup logs confirmed five pu
 References: https://docs.railway.com/pricing/free-trial ; https://docs.railway.com/volumes/reference ; https://docs.n8n.io/deploy/host-n8n/configure-n8n/use-the-command-line ; https://github.com/n8n-io/n8n/pkgs/container/n8n
 
 Live diagnostics subsequently confirmed recent heartbeats for all four scheduled jobs and exactly one Telegram welcome in `sent` state. OpenAI and Meta presence flags remain false; Instagram dry-run stays enabled. The remaining Telegram commissioning check is an owner-originated `/status` message.
+
+OpenAI commissioning: set `OPENAI_API_KEY` through private Railway variables. The authenticated POST `/internal/openai/check` uses a fixed synthetic brand question, accounts for the daily AI budget, and caches one check per UTC day/model. It creates no Instagram events or outbox messages and returns only the selected model, reply or a sanitized error. A successful check proves connectivity and structured output, not readiness to enable Instagram. Owner credential aliases are referenced securely without reading their values.
